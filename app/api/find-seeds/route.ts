@@ -243,14 +243,134 @@ function hasRealVersion(value: unknown) {
   return /\d/.test(String(value));
 }
 
-function hasSourceUrl(seed: Record<string, unknown>) {
-  const sources = Array.isArray(seed.sources) ? (seed.sources as Source[]) : [];
-  return sources.some((source) => typeof source.url === 'string' && /^https?:\/\//i.test(source.url));
+function normalizeSourceUrl(url?: string) {
+  if (!url) return undefined;
+
+  let value = String(url).trim().replace(/^<|>$/g, '').replace(/[\])}.,]+$/g, '');
+
+  try {
+    const parsed = new URL(value);
+
+    // Unwrap common Google redirect URLs if the model returns them.
+    const nested = parsed.searchParams.get('url') || parsed.searchParams.get('q');
+    if (nested && /^https?:\/\//i.test(nested) && parsed.hostname.includes('google.')) {
+      value = nested;
+    }
+  } catch {
+    return undefined;
+  }
+
+  try {
+    const parsed = new URL(value);
+    if (!['http:', 'https:'].includes(parsed.protocol)) return undefined;
+    parsed.hash = '';
+    return parsed.toString();
+  } catch {
+    return undefined;
+  }
 }
 
-function sanitizeSeedResults(rawSeeds: unknown[], count: number) {
+function canonicalUrlKey(url?: string) {
+  const normalized = normalizeSourceUrl(url);
+  if (!normalized) return undefined;
+
+  try {
+    const parsed = new URL(normalized);
+    parsed.hash = '';
+
+    for (const key of Array.from(parsed.searchParams.keys())) {
+      if (/^(utm_|fbclid|gclid|mc_cid|mc_eid)/i.test(key)) {
+        parsed.searchParams.delete(key);
+      }
+    }
+
+    return parsed.toString().replace(/\/$/, '').toLowerCase();
+  } catch {
+    return normalized.replace(/\/$/, '').toLowerCase();
+  }
+}
+
+function hasSourceUrl(seed: Record<string, unknown>) {
+  const sources = Array.isArray(seed.sources) ? (seed.sources as Source[]) : [];
+  return sources.some((source) => Boolean(normalizeSourceUrl(source.url)));
+}
+
+async function checkUrlStatus(url: string): Promise<'ok' | 'not-found' | 'unknown'> {
+  const normalized = normalizeSourceUrl(url);
+  if (!normalized) return 'not-found';
+
+  const headers = {
+    Accept: 'text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8',
+    'User-Agent':
+      'Mozilla/5.0 (compatible; AI-Minecraft-Seed-Finder/1.0; +https://seedfinder-ai-website.vercel.app)'
+  };
+
+  for (const method of ['HEAD', 'GET'] as const) {
+    try {
+      const response = await fetchWithTimeout(
+        normalized,
+        {
+          method,
+          redirect: 'follow',
+          headers
+        },
+        7000
+      );
+
+      if (response.status === 404 || response.status === 410) return 'not-found';
+      if ((response.status >= 200 && response.status < 400) || [401, 403, 429].includes(response.status)) return 'ok';
+      if (response.status === 405 && method === 'HEAD') continue;
+      if (response.status >= 500) return 'unknown';
+      if (response.status >= 400) return 'not-found';
+    } catch {
+      // Some websites block server-side checks. If this came from a trusted search result we can still keep it.
+      return 'unknown';
+    }
+  }
+
+  return 'unknown';
+}
+
+async function filterVerifiedSources(sources: Source[], trustedUrlKeys: Set<string>, statusCache: Map<string, Promise<'ok' | 'not-found' | 'unknown'>>) {
+  const verified: Source[] = [];
+
+  for (const source of sources) {
+    const normalizedUrl = normalizeSourceUrl(source.url);
+    if (!normalizedUrl) continue;
+
+    const key = canonicalUrlKey(normalizedUrl);
+    if (!key) continue;
+
+    let statusPromise = statusCache.get(key);
+    if (!statusPromise) {
+      statusPromise = checkUrlStatus(normalizedUrl);
+      statusCache.set(key, statusPromise);
+    }
+
+    const status = await statusPromise;
+    const trusted = trustedUrlKeys.has(key);
+
+    if (status === 'ok' || (status === 'unknown' && trusted)) {
+      verified.push({
+        ...source,
+        url: normalizedUrl,
+        website: source.website || hostFromUrl(normalizedUrl)
+      });
+    }
+  }
+
+  return uniqueSources(verified);
+}
+
+async function sanitizeSeedResults(rawSeeds: unknown[], count: number, trustedSources: Source[] = []) {
   const rejected: string[] = [];
   const validSeeds: Record<string, unknown>[] = [];
+  const trustedUrlKeys = new Set(
+    trustedSources
+      .map((source) => canonicalUrlKey(source.url))
+      .filter((key): key is string => Boolean(key))
+  );
+  const statusCache = new Map<string, Promise<'ok' | 'not-found' | 'unknown'>>();
 
   for (const rawSeed of rawSeeds) {
     if (!rawSeed || typeof rawSeed !== 'object') {
@@ -267,16 +387,15 @@ function sanitizeSeedResults(rawSeeds: unknown[], count: number) {
     if (!hasRealVersion(seed.version)) reasons.push('missing specific Minecraft version');
     if (!hasSourceUrl(seed)) reasons.push('missing source URL');
 
+    const rawSources = Array.isArray(seed.sources) ? (seed.sources as Source[]) : [];
+    const cleanedSources = reasons.length ? [] : await filterVerifiedSources(rawSources, trustedUrlKeys, statusCache);
+
+    if (!cleanedSources.length) reasons.push('source URL is dead, 404, or not verified');
+
     if (reasons.length) {
       rejected.push(`${title}: ${reasons.join(', ')}`);
       continue;
     }
-
-    const cleanedSources = uniqueSources(
-      (Array.isArray(seed.sources) ? (seed.sources as Source[]) : []).filter(
-        (source) => source.url && /^https?:\/\//i.test(source.url)
-      )
-    );
 
     validSeeds.push({
       ...seed,
@@ -628,11 +747,11 @@ export async function POST(request: NextRequest) {
 
     const parsed = extractJson(text);
 
-    const { validSeeds: seeds, rejected } = sanitizeSeedResults(Array.isArray(parsed.seeds) ? parsed.seeds : [], count);
+    const { validSeeds: seeds, rejected } = await sanitizeSeedResults(Array.isArray(parsed.seeds) ? parsed.seeds : [], count, rawGroundingSources);
 
     if (!seeds.length) {
       throw new Error(
-        'No verified seeds found with exact seed number, Java/Bedrock edition, Minecraft version, and source URL. Try a more specific request like "Java 1.21 village seed near spawn with coordinates", or try again later with different sources.'
+        'No verified seeds found with exact seed number, Java/Bedrock edition, Minecraft version, and working source URL. Some source links returned 404 or could not be verified. Try a more specific request like "Java 1.21 village seed near spawn with coordinates", or try again later with different sources.'
       );
     }
 
