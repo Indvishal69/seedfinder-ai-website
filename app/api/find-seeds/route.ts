@@ -209,6 +209,90 @@ function groundingSources(data: GeminiResponse): Source[] {
   );
 }
 
+function hasBadPlaceholder(value: unknown) {
+  const text = String(value || '').trim().toLowerCase();
+  if (!text) return true;
+
+  return [
+    'unknown',
+    'not provided',
+    'not shown',
+    'not listed',
+    'not available',
+    'unavailable',
+    'unspecified',
+    'n/a',
+    'none',
+    'no seed'
+  ].some((bad) => text === bad || text.includes(bad));
+}
+
+function hasRealSeedValue(value: unknown) {
+  const text = String(value || '').trim();
+  return text.length > 0 && !hasBadPlaceholder(text);
+}
+
+function hasRealEdition(value: unknown) {
+  if (hasBadPlaceholder(value)) return false;
+  const text = String(value).toLowerCase();
+  return text.includes('java') || text.includes('bedrock') || text.includes('both');
+}
+
+function hasRealVersion(value: unknown) {
+  if (hasBadPlaceholder(value)) return false;
+  return /\d/.test(String(value));
+}
+
+function hasSourceUrl(seed: Record<string, unknown>) {
+  const sources = Array.isArray(seed.sources) ? (seed.sources as Source[]) : [];
+  return sources.some((source) => typeof source.url === 'string' && /^https?:\/\//i.test(source.url));
+}
+
+function sanitizeSeedResults(rawSeeds: unknown[], count: number) {
+  const rejected: string[] = [];
+  const validSeeds: Record<string, unknown>[] = [];
+
+  for (const rawSeed of rawSeeds) {
+    if (!rawSeed || typeof rawSeed !== 'object') {
+      rejected.push('Invalid seed object');
+      continue;
+    }
+
+    const seed = rawSeed as Record<string, unknown>;
+    const title = String(seed.title || seed.seed || 'Untitled seed');
+    const reasons: string[] = [];
+
+    if (!hasRealSeedValue(seed.seed)) reasons.push('missing exact seed number/string');
+    if (!hasRealEdition(seed.edition)) reasons.push('missing Java/Bedrock edition');
+    if (!hasRealVersion(seed.version)) reasons.push('missing specific Minecraft version');
+    if (!hasSourceUrl(seed)) reasons.push('missing source URL');
+
+    if (reasons.length) {
+      rejected.push(`${title}: ${reasons.join(', ')}`);
+      continue;
+    }
+
+    const cleanedSources = uniqueSources(
+      (Array.isArray(seed.sources) ? (seed.sources as Source[]) : []).filter(
+        (source) => source.url && /^https?:\/\//i.test(source.url)
+      )
+    );
+
+    validSeeds.push({
+      ...seed,
+      seed: String(seed.seed).trim(),
+      edition: String(seed.edition).trim(),
+      version: String(seed.version).trim(),
+      confidence: hasBadPlaceholder(seed.confidence) ? 'Medium' : seed.confidence,
+      sources: cleanedSources
+    });
+
+    if (validSeeds.length >= count) break;
+  }
+
+  return { validSeeds, rejected };
+}
+
 function buildPrompt(query: string, edition: string, version: string, count: number) {
   return `You are a careful Minecraft seed research assistant.
 
@@ -222,9 +306,12 @@ Number of seed results to return: ${count}
 Strict rules:
 - Return only seeds that are published on public websites, articles, forums, wikis, Reddit posts, or seed databases.
 - Do not invent seed numbers, coordinates, websites, editions, or versions.
-- Every seed must include at least one source URL where the seed was found.
+- Every returned seed MUST have an exact seed number/string in the "seed" field. If the source does not show the exact seed, OMIT that result.
+- Every returned seed MUST have Java/Bedrock/Both edition and a specific Minecraft version from the source. If edition or version is unknown, OMIT that result.
+- Every seed must include at least one source URL where the exact seed was found.
+- Do not include collection pages, Reddit threads, or YouTube videos unless the accessible source text/snippet contains the exact seed number/string.
 - Prefer recent and version-specific results.
-- If the exact request has no perfect match, return close matches and explain the difference in notes.
+- If the exact request has no perfect match, return close matches, but only if they still have exact seed + edition + version + source URL.
 - Include both Java/Bedrock compatibility information when the source gives it.
 - Include exact coordinates for structures/biomes when the source gives them. If exact coordinates are not available, say "not provided by source".
 - Keep the response in English.
@@ -387,7 +474,8 @@ Page extract: ${source.content || 'not available'}
   return `${buildPrompt(query, edition, version, count)}
 
 You do not have live browsing in this step. Use ONLY the search results and page extracts below.
-If the provided search results do not contain enough information for a seed, do not invent it.
+If the provided search results do not contain enough information for an exact seed number/string, Java/Bedrock edition, version, and source URL, omit that result.
+Never output "not provided by source", "unknown", or similar text in the seed, edition, or version fields.
 Every returned seed must cite one or more URLs from this provided source list.
 
 Provided web search results:
@@ -540,8 +628,15 @@ export async function POST(request: NextRequest) {
 
     const parsed = extractJson(text);
 
+    const { validSeeds: seeds, rejected } = sanitizeSeedResults(Array.isArray(parsed.seeds) ? parsed.seeds : [], count);
+
+    if (!seeds.length) {
+      throw new Error(
+        'No verified seeds found with exact seed number, Java/Bedrock edition, Minecraft version, and source URL. Try a more specific request like "Java 1.21 village seed near spawn with coordinates", or try again later with different sources.'
+      );
+    }
+
     const websitesUsed = uniqueSources([...(parsed.websitesUsed || []), ...rawGroundingSources]);
-    const seeds = Array.isArray(parsed.seeds) ? parsed.seeds.slice(0, count) : [];
 
     const payload = {
       query: parsed.query || query,
@@ -553,6 +648,7 @@ export async function POST(request: NextRequest) {
       rawGroundingSources,
       seeds,
       provider,
+      rejectedResults: rejected.slice(0, 5),
       cached: false
     };
 
