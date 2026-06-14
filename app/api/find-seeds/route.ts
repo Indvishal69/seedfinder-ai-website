@@ -47,6 +47,69 @@ type WebSearchSource = Source & {
   content?: string;
 };
 
+const GEMINI_SEED_RESPONSE_SCHEMA = {
+  type: 'OBJECT',
+  properties: {
+    query: { type: 'STRING' },
+    generatedAt: { type: 'STRING' },
+    disclaimer: { type: 'STRING' },
+    websitesUsed: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING' },
+          website: { type: 'STRING' },
+          url: { type: 'STRING' },
+          evidence: { type: 'STRING' }
+        }
+      }
+    },
+    seeds: {
+      type: 'ARRAY',
+      items: {
+        type: 'OBJECT',
+        properties: {
+          title: { type: 'STRING' },
+          seed: { type: 'STRING' },
+          edition: { type: 'STRING' },
+          version: { type: 'STRING' },
+          spawn: { type: 'STRING' },
+          confidence: { type: 'STRING' },
+          tags: { type: 'ARRAY', items: { type: 'STRING' } },
+          whyMatches: { type: 'STRING' },
+          features: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                name: { type: 'STRING' },
+                type: { type: 'STRING' },
+                coordinates: { type: 'STRING' },
+                description: { type: 'STRING' }
+              }
+            }
+          },
+          sources: {
+            type: 'ARRAY',
+            items: {
+              type: 'OBJECT',
+              properties: {
+                title: { type: 'STRING' },
+                website: { type: 'STRING' },
+                url: { type: 'STRING' },
+                evidence: { type: 'STRING' }
+              }
+            }
+          },
+          notes: { type: 'STRING' }
+        }
+      }
+    }
+  },
+  required: ['query', 'generatedAt', 'disclaimer', 'websitesUsed', 'seeds']
+};
+
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
 const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
@@ -705,7 +768,7 @@ async function formatResearchJsonWithGemini(apiKeys: string[], prompt: string) {
     }
   }
 
-  throw new Error(`Gemini JSON formatting failed. Recent errors: ${errors.slice(-4).join(' | ')}`);
+  throw new Error('Gemini found sources but could not format a clean seed list. Please tap Find Real Seeds again or reduce the result count.');
 }
 
 async function callGemini(apiKey: string, model: string, prompt: string) {
@@ -770,7 +833,8 @@ async function callGeminiNoSearch(apiKey: string, model: string, prompt: string)
         temperature: 0,
         topP: 0.8,
         maxOutputTokens: 12288,
-        responseMimeType: 'application/json'
+        responseMimeType: 'application/json',
+        responseSchema: GEMINI_SEED_RESPONSE_SCHEMA
       }
     })
   });
@@ -815,7 +879,7 @@ ${compactBrokenJson}`;
     }
   }
 
-  throw new Error(`AI returned malformed JSON and repair also failed. Recent repair errors: ${errors.slice(-3).join(' | ')}`);
+  throw new Error('Gemini returned an incomplete response. Please retry with fewer results or a more specific seed request.');
 }
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000) {

@@ -414,7 +414,7 @@ export default function Home() {
         <div className="nav-links">
           <a href="#finder">Find Seeds</a>
           <a href="#results">Results</a>
-          <a href="#seed-library">Saved Seeds</a>
+          <a href="#seed-library">Other Seeds</a>
           <a href="/seed-guides">Guides</a>
         </div>
       </nav>
@@ -660,10 +660,10 @@ export default function Home() {
       <section className="seed-library-section seed-tabs-section" id="seed-library">
         <div className="seo-section-head">
           <span className="badge">💾 Seed library</span>
-          <h2>Saved seeds tab</h2>
+          <h2>Seed library</h2>
           <p>
-            Use the tabs below to switch between built-in seeds and AI saved seeds.
-            {globalLibraryReady ? ' Global database is connected, so saved seeds can appear for all users.' : ' Global database is not connected yet, so this browser saves local seeds only.'}
+            Use the tabs below: Other Seeds shows seeds discovered from searches, and Built-in Seeds shows ready-to-copy starter picks.
+            {globalLibraryReady ? ' Global database is connected, so other players can see newly found seeds too.' : ' Global database is not connected yet, so this browser saves local seeds only.'}
           </p>
         </div>
 
@@ -675,7 +675,7 @@ export default function Home() {
             aria-selected={activeSeedTab === 'saved'}
             onClick={() => setActiveSeedTab('saved')}
           >
-            💾 AI Saved Seeds <span>{aiSavedSeeds.length}</span>
+            🌍 Other Seeds <span>{aiSavedSeeds.length}</span>
           </button>
           <button
             className={`seed-tab ${activeSeedTab === 'preloaded' ? 'active' : ''}`}
@@ -689,7 +689,7 @@ export default function Home() {
         </div>
 
         {activeSeedTab === 'saved' && (
-          <AdsterraNativeBannerAd label="Saved seeds advertisement" className="results-ad library-ad" />
+          <AdsterraNativeBannerAd label="Other seeds advertisement" className="results-ad library-ad" />
         )}
 
         {activeLibrarySeeds.length ? (
@@ -769,7 +769,7 @@ export default function Home() {
 
                 {activeSeedTab === 'saved' && (index + 1) % 3 === 0 && (
                   <div className="library-inline-ad">
-                    <AdsterraNativeBannerAd label="Saved seeds in-feed advertisement" className="results-ad library-ad" />
+                    <AdsterraNativeBannerAd label="Other seeds in-feed advertisement" className="results-ad library-ad" />
                   </div>
                 )}
               </Fragment>
@@ -777,7 +777,7 @@ export default function Home() {
           </div>
         ) : (
           <div className="empty-card library-empty">
-            No AI-saved seeds yet. Run a Gemini search; verified results will be saved in this tab automatically.
+            No other seeds yet. Run a search; verified results will appear in this tab automatically.
           </div>
         )}
       </section>
@@ -806,7 +806,7 @@ export default function Home() {
       <footer className="footer">
         <div>Built for Vercel. Keep your Google AI key in environment variables only.</div>
         <nav className="footer-links" aria-label="Footer links">
-          <a href="#seed-library">Saved Seeds</a>
+          <a href="#seed-library">Other Seeds</a>
           <a href="/seed-guides">Seed Guides</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>

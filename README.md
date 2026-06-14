@@ -162,3 +162,12 @@ It also adds in-feed Adsterra native ads inside the Saved Seeds tab after every 
 ## Professional polish + auto-scroll
 
 The homepage now includes a sticky professional navigation bar, feature stats, and smooth auto-scroll to the results area as soon as seeds are returned from AI, cache, or the saved library.
+
+## Other Seeds tab + mobile/pro UI update
+
+The homepage now uses clearer wording:
+
+- **Other Seeds** tab: seeds discovered from searches and saved globally/browser-side.
+- **Built-in Seeds** tab: starter picks already included with the site.
+
+The Other Seeds tab includes ads and full seed details. The finder auto-scrolls to the results once seeds are generated.
