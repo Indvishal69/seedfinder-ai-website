@@ -158,3 +158,7 @@ The Saved Seeds tab now shows full seed details on each card:
 - Tags
 
 It also adds in-feed Adsterra native ads inside the Saved Seeds tab after every 3 saved seed cards.
+
+## Professional polish + auto-scroll
+
+The homepage now includes a sticky professional navigation bar, feature stats, and smooth auto-scroll to the results area as soon as seeds are returned from AI, cache, or the saved library.

@@ -524,6 +524,9 @@ async function sanitizeSeedResults(rawSeeds: unknown[], count: number, trustedSo
       edition: String(seed.edition).trim(),
       version: String(seed.version).trim(),
       confidence: hasBadPlaceholder(seed.confidence) ? 'Medium' : seed.confidence,
+      tags: Array.isArray(seed.tags)
+        ? (seed.tags as unknown[]).map((tag) => String(tag).trim()).filter(Boolean).slice(0, 8)
+        : [],
       sources: cleanedSources
     });
 
@@ -555,6 +558,9 @@ Strict rules:
 - Include both Java/Bedrock compatibility information when the source gives it.
 - Include exact coordinates for structures/biomes when the source gives them. If exact coordinates are not available, say "not provided by source".
 - Keep the response in English.
+- Return compact valid JSON only. Do not put raw line breaks inside string values. Escape quotes inside strings.
+- For each seed, include maximum 3 features and maximum 2 source objects. Keep whyMatches/evidence/notes concise.
+- If you cannot fit all requested seeds in valid JSON, return fewer complete valid seeds instead of broken JSON.
 
 Return ONLY valid JSON. No markdown. Use this exact shape:
 {
@@ -572,6 +578,7 @@ Return ONLY valid JSON. No markdown. Use this exact shape:
       "version": "Minecraft version(s) listed by source",
       "spawn": "spawn description or coordinates if known",
       "confidence": "High / Medium / Low",
+      "tags": ["short tag like Village", "Java", "1.21"],
       "whyMatches": "why it matches the request",
       "features": [
         { "name": "structure or biome name", "type": "Village / Ancient City / Biome / etc", "coordinates": "X Y Z or X Z or not provided by source", "description": "what is there" }
@@ -583,6 +590,122 @@ Return ONLY valid JSON. No markdown. Use this exact shape:
     }
   ]
 }`;
+}
+
+function buildResearchPrompt(query: string, edition: string, version: string, count: number) {
+  return `You are a careful Minecraft seed web researcher.
+
+Search the public web for REAL Minecraft seeds matching the request.
+
+User request: ${query}
+Preferred edition: ${edition}
+Preferred version: ${version}
+Candidate seeds to research: ${count}
+
+Return concise research notes in plain text, not JSON.
+For each candidate, include these fields if available:
+- Title
+- Exact seed number/string
+- Edition: Java / Bedrock / Both
+- Minecraft version
+- Spawn
+- 2-3 important features with coordinates if source gives them
+- Source title
+- Source URL
+- Evidence sentence from source
+- Suggested tags
+
+Strict rules:
+- Do not invent seeds, source URLs, edition, version, or coordinates.
+- Omit any candidate without an exact seed number/string.
+- Omit any candidate without edition and version.
+- Omit any candidate without a source URL.
+- Keep the notes compact and in English.`;
+}
+
+function buildJsonFromResearchPrompt(
+  query: string,
+  edition: string,
+  version: string,
+  count: number,
+  researchNotes: string,
+  sources: Source[]
+) {
+  const sourceList = sources
+    .slice(0, 16)
+    .map((source, index) => `[${index + 1}] ${source.title || source.website || 'Source'} - ${source.url || ''}`)
+    .join('\n');
+
+  return `Convert the research notes into valid compact JSON only. Do not use markdown.
+
+User request: ${query}
+Preferred edition: ${edition}
+Preferred version: ${version}
+Maximum final seeds: ${count}
+
+Rules:
+- Return only valid JSON.
+- Use double quoted JSON property names.
+- Escape all newlines and quotes inside strings.
+- Never output raw control characters inside strings.
+- Omit any seed missing exact seed number/string, edition, version, or source URL.
+- Do not invent source URLs. Use URLs from the notes/source list.
+- Include 3-6 short tags for every seed, e.g. ["Village", "Java", "1.21", "Trial Chamber"].
+- Keep every string concise. Max 3 features and max 2 sources per seed.
+
+Available grounded sources:
+${sourceList}
+
+Research notes:
+${researchNotes.slice(0, 24000)}
+
+Return this exact JSON shape:
+{
+  "query": "short summary",
+  "generatedAt": "${new Date().toISOString()}",
+  "disclaimer": "Verify every seed in the listed Minecraft edition and version.",
+  "websitesUsed": [
+    { "title": "source title", "website": "domain", "url": "https://...", "evidence": "short evidence" }
+  ],
+  "seeds": [
+    {
+      "title": "short title",
+      "seed": "exact seed number/string",
+      "edition": "Java / Bedrock / Both",
+      "version": "specific Minecraft version",
+      "spawn": "spawn info if known",
+      "confidence": "High / Medium / Low",
+      "tags": ["Village", "Java", "1.21"],
+      "whyMatches": "brief reason",
+      "features": [
+        { "name": "feature name", "type": "feature type", "coordinates": "coordinates or not provided by source", "description": "short description" }
+      ],
+      "sources": [
+        { "title": "source title", "website": "domain", "url": "https://...", "evidence": "what was taken" }
+      ],
+      "notes": "short caveat"
+    }
+  ]
+}`;
+}
+
+async function formatResearchJsonWithGemini(apiKeys: string[], prompt: string) {
+  const requestedModel = (process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
+  const models = Array.from(new Set([requestedModel, DEFAULT_MODEL, 'gemini-2.5-flash', 'gemini-2.0-flash'].filter(Boolean)));
+  const errors: string[] = [];
+
+  for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex += 1) {
+    for (const model of models) {
+      try {
+        const text = await callGeminiNoSearch(apiKeys[keyIndex], model, prompt);
+        return extractJson(text);
+      } catch (error) {
+        errors.push(`${shortKeyLabel(keyIndex)}/${model}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  throw new Error(`Gemini JSON formatting failed. Recent errors: ${errors.slice(-4).join(' | ')}`);
 }
 
 async function callGemini(apiKey: string, model: string, prompt: string) {
@@ -599,7 +722,7 @@ async function callGemini(apiKey: string, model: string, prompt: string) {
     generationConfig: {
       temperature: 0.25,
       topP: 0.9,
-      maxOutputTokens: 8192
+      maxOutputTokens: 12288
     }
   };
 
@@ -625,6 +748,74 @@ async function callGemini(apiKey: string, model: string, prompt: string) {
   }
 
   return { text, data };
+}
+
+async function callGeminiNoSearch(apiKey: string, model: string, prompt: string) {
+  const url = `https://generativelanguage.googleapis.com/v1beta/models/${encodeURIComponent(model)}:generateContent`;
+
+  const response = await fetch(url, {
+    method: 'POST',
+    headers: {
+      'Content-Type': 'application/json',
+      'x-goog-api-key': apiKey
+    },
+    body: JSON.stringify({
+      contents: [
+        {
+          role: 'user',
+          parts: [{ text: prompt }]
+        }
+      ],
+      generationConfig: {
+        temperature: 0,
+        topP: 0.8,
+        maxOutputTokens: 12288,
+        responseMimeType: 'application/json'
+      }
+    })
+  });
+
+  const data = (await response.json()) as GeminiResponse;
+
+  if (!response.ok) {
+    const message = data.error?.message || `Gemini JSON repair failed with status ${response.status}`;
+    throw new Error(message);
+  }
+
+  const text = data.candidates?.[0]?.content?.parts?.map((part) => part.text || '').join('\n').trim();
+  if (!text) throw new Error('Gemini JSON repair returned an empty response.');
+  return text;
+}
+
+async function repairJsonWithGemini(apiKeys: string[], malformedText: string) {
+  const requestedModel = (process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
+  const models = Array.from(new Set([requestedModel, DEFAULT_MODEL, 'gemini-2.5-flash', 'gemini-2.0-flash'].filter(Boolean)));
+  const compactBrokenJson = sliceJsonObject(malformedText).slice(0, 30000);
+  const repairPrompt = `Repair the malformed JSON below into valid JSON only.
+Rules:
+- Return only JSON, no markdown.
+- Preserve the original schema with query, generatedAt, disclaimer, websitesUsed, and seeds.
+- Drop any broken/incomplete seed object rather than returning invalid JSON.
+- Escape all quotes and newlines inside string values.
+- Remove trailing commas and control characters.
+- Keep at most 20 seed objects.
+
+Malformed JSON:
+${compactBrokenJson}`;
+  const errors: string[] = [];
+
+  for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex += 1) {
+    for (const model of models) {
+      try {
+        const repaired = await callGeminiNoSearch(apiKeys[keyIndex], model, repairPrompt);
+        return extractJson(repaired);
+      } catch (error) {
+        errors.push(`${shortKeyLabel(keyIndex)}/${model}: ${error instanceof Error ? error.message : String(error)}`);
+      }
+    }
+  }
+
+  throw new Error(`AI returned malformed JSON and repair also failed. Recent repair errors: ${errors.slice(-3).join(' | ')}`);
 }
 
 async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutMs = 12000) {
@@ -826,7 +1017,7 @@ async function searchSeeds(apiKeys: string[], prompt: string) {
   }
 
   throw new Error(
-    `All configured Google AI keys failed or reached quota. Use legitimate Gemini API keys from your own Google AI Studio projects, add billing for production traffic, wait for quota reset, or configure SERPER_API_KEY + GROQ_API_KEY for fallback. ` +
+    `All configured Google AI keys failed or reached quota. Use legitimate Gemini API keys from your own Google AI Studio projects, add billing for production traffic, or wait for quota reset. ` +
       `Recent errors: ${errors.slice(-5).join(' | ')}`
   );
 }
@@ -867,14 +1058,15 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ...globalCachedPayload, cached: true, provider: 'global-seed-database' });
     }
 
-    const prompt = buildPrompt(query, edition, version, candidateCount);
-    const googleResult = await searchSeeds(apiKeys, prompt);
-    const text = googleResult.text;
+    const researchPrompt = buildResearchPrompt(query, edition, version, candidateCount);
+    const googleResult = await searchSeeds(apiKeys, researchPrompt);
+    const researchText = googleResult.text;
     const rawGroundingSources = groundingSources(googleResult.data);
     const provider = 'gemini-google-search';
     const providerMode = 'gemini';
 
-    const parsed = extractJson(text);
+    const jsonPrompt = buildJsonFromResearchPrompt(query, edition, version, candidateCount, researchText, rawGroundingSources);
+    const parsed = await formatResearchJsonWithGemini(apiKeys, jsonPrompt);
 
     const { validSeeds: seeds, rejected } = await sanitizeSeedResults(
       Array.isArray(parsed.seeds) ? parsed.seeds : [],

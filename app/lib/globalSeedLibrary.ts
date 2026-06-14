@@ -14,6 +14,7 @@ export type GlobalSeed = {
   version?: string;
   spawn?: string;
   confidence?: string;
+  tags?: string[];
   whyMatches?: string;
   features?: Array<{
     name?: string;
@@ -89,6 +90,7 @@ function cleanSeed(seed: GlobalSeed): GlobalSeed | null {
     version: String(seed.version).trim().slice(0, 80),
     spawn: seed.spawn ? String(seed.spawn).slice(0, 180) : undefined,
     confidence: seed.confidence ? String(seed.confidence).slice(0, 60) : 'Saved',
+    tags: Array.isArray(seed.tags) ? seed.tags.map((tag) => String(tag).slice(0, 32)).filter(Boolean).slice(0, 8) : [],
     whyMatches: seed.whyMatches ? String(seed.whyMatches).slice(0, 500) : undefined,
     features: Array.isArray(seed.features) ? seed.features.slice(0, 8) : [],
     sources: Array.isArray(seed.sources)

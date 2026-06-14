@@ -1,6 +1,6 @@
 'use client';
 
-import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react';
+import { Fragment, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AdsterraBannerAd, AdsterraNativeBannerAd, AdsterraSocialBar } from './components/AdsterraAds';
 
 type Feature = {
@@ -262,6 +262,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [copiedSeed, setCopiedSeed] = useState('');
   const [activeSeedTab, setActiveSeedTab] = useState<'preloaded' | 'saved'>('saved');
+  const resultsRef = useRef<HTMLElement | null>(null);
 
   const allSources = useMemo(() => {
     const fromSeeds = result?.seeds?.flatMap((seed) => seed.sources || []) || [];
@@ -319,6 +320,12 @@ export default function Home() {
     return librarySeeds.filter((seed) => seed.seed && lowerQuery.includes(String(seed.seed).toLowerCase())).slice(0, Number(count) || 5);
   }
 
+  function scrollToResults() {
+    window.setTimeout(() => {
+      resultsRef.current?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+    }, 80);
+  }
+
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
@@ -333,6 +340,7 @@ export default function Home() {
     const savedSearch = loadSavedSearch(searchKey);
     if (savedSearch) {
       setResult({ ...savedSearch, cached: true, provider: 'saved-browser-library' });
+      scrollToResults();
       return;
     }
 
@@ -348,6 +356,7 @@ export default function Home() {
         provider: 'saved-seed-library',
         cached: true
       });
+      scrollToResults();
       return;
     }
 
@@ -367,6 +376,7 @@ export default function Home() {
 
       setResult(data);
       saveAiResult(searchKey, data);
+      scrollToResults();
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong while searching.');
     } finally {
@@ -396,6 +406,18 @@ export default function Home() {
   return (
     <main className="shell">
       <AdsterraSocialBar />
+      <nav className="top-nav" aria-label="Main navigation">
+        <a className="brand-lockup" href="#finder">
+          <span className="brand-icon">⛏️</span>
+          <span>SeedFinder AI</span>
+        </a>
+        <div className="nav-links">
+          <a href="#finder">Find Seeds</a>
+          <a href="#results">Results</a>
+          <a href="#seed-library">Saved Seeds</a>
+          <a href="/seed-guides">Guides</a>
+        </div>
+      </nav>
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }} />
       <section className="hero">
         <div className="hero-inner">
@@ -422,6 +444,13 @@ export default function Home() {
             </div>
           </div>
         </div>
+      </section>
+
+      <section className="pro-stats" aria-label="Website features">
+        <div><strong>Google Search</strong><span>Gemini grounded sources</span></div>
+        <div><strong>Verified Links</strong><span>404/dead sources filtered</span></div>
+        <div><strong>Saved Seeds</strong><span>Global + browser library</span></div>
+        <div><strong>Fast Reuse</strong><span>Same searches use cache</span></div>
       </section>
 
       <div className="responsive-ad-stack top-ad">
@@ -504,7 +533,7 @@ export default function Home() {
         </aside>
       </section>
 
-      <section className="results-wrap" aria-live="polite">
+      <section className="results-wrap" id="results" ref={resultsRef} aria-live="polite">
         {error && <div className="error-card">⚠️ {error}</div>}
 
         {!error && !result && !loading && (
