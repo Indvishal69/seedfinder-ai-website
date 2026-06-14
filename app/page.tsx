@@ -104,6 +104,18 @@ export default function Home() {
     }
   }
 
+
+  const homeJsonLd = {
+    '@context': 'https://schema.org',
+    '@type': 'WebApplication',
+    name: 'AI Minecraft Seed Finder',
+    applicationCategory: 'GameApplication',
+    operatingSystem: 'Web',
+    description: 'Find real Minecraft seeds with source websites, Java/Bedrock edition details, versions, and coordinates.',
+    url: 'https://seedfinder-ai-website.vercel.app',
+    offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }
+  };
+
   async function copySeed(seed?: string) {
     if (!seed) return;
     await navigator.clipboard.writeText(seed);
@@ -114,6 +126,7 @@ export default function Home() {
   return (
     <main className="shell">
       <AdsterraSocialBar />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }} />
       <section className="hero">
         <div className="hero-inner">
           <div>
@@ -146,7 +159,7 @@ export default function Home() {
         <AdsterraBannerAd size="320x50" label="Top advertisement" className="mobile-ad" />
       </div>
 
-      <section className="search-panel">
+      <section className="search-panel" id="finder">
         <form className="form-card" onSubmit={submit}>
           <label htmlFor="query">What kind of seed do you want?</label>
           <textarea
@@ -338,9 +351,31 @@ export default function Home() {
         )}
       </section>
 
+      <section className="seo-section">
+        <div className="seo-section-head">
+          <span className="badge">📈 Minecraft seed guides</span>
+          <h2>Popular seed searches</h2>
+          <p>
+            Explore SEO-friendly guides for Java, Bedrock, 1.21 trial chambers, villages, ancient cities,
+            cherry groves, survival islands, mansions, and speedrun-style seeds.
+          </p>
+        </div>
+        <div className="seo-link-grid">
+          <a href="/seed-guides/best-minecraft-1-21-seeds">⛏️ Best Minecraft 1.21 Seeds</a>
+          <a href="/seed-guides/minecraft-java-village-seeds">🏘️ Java Village Seeds</a>
+          <a href="/seed-guides/minecraft-bedrock-survival-island-seeds">🏝️ Bedrock Survival Island Seeds</a>
+          <a href="/seed-guides/ancient-city-seeds">🌌 Ancient City Seeds</a>
+          <a href="/seed-guides/trial-chamber-seeds">🧱 Trial Chamber Seeds</a>
+          <a href="/seed-guides/cherry-grove-seeds">🌸 Cherry Grove Seeds</a>
+          <a href="/seed-guides/woodland-mansion-seeds">🏚️ Woodland Mansion Seeds</a>
+          <a href="/seed-guides/speedrun-seeds">⚡ Speedrun Seeds</a>
+        </div>
+      </section>
+
       <footer className="footer">
         <div>Built for Vercel. Keep your Google AI key in environment variables only.</div>
         <nav className="footer-links" aria-label="Footer links">
+          <a href="/seed-guides">Seed Guides</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
