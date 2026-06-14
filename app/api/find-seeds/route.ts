@@ -119,6 +119,11 @@ function shortKeyLabel(index: number) {
   return `key ${index + 1}`;
 }
 
+function getCandidateCount(requestedCount: number) {
+  // Ask providers for more candidates because strict verification removes weak/dead-source results.
+  return Math.min(Math.max(requestedCount * 4, 12), 20);
+}
+
 function makeCacheKey(query: string, edition: string, version: string, count: number) {
   return JSON.stringify({
     query: query.toLowerCase().replace(/\s+/g, ' ').trim(),
@@ -534,48 +539,66 @@ async function readSourceWithJina(url: string) {
   }
 }
 
-async function searchWithSerper(apiKey: string, query: string, edition: string, version: string): Promise<WebSearchSource[]> {
-  const searchQuery = `${query} Minecraft seed ${edition} ${version} seed coordinates source`;
-  const response = await fetchWithTimeout('https://google.serper.dev/search', {
-    method: 'POST',
-    headers: {
-      'Content-Type': 'application/json',
-      'X-API-KEY': apiKey
-    },
-    body: JSON.stringify({
-      q: searchQuery,
-      num: 10,
-      gl: 'us',
-      hl: 'en'
-    })
-  }, 12000);
+async function searchWithSerper(
+  apiKey: string,
+  query: string,
+  edition: string,
+  version: string,
+  candidateCount = 12
+): Promise<WebSearchSource[]> {
+  const searchQueries = Array.from(
+    new Set([
+      `${query} Minecraft seed ${edition} ${version} exact seed coordinates`,
+      `${query} Minecraft ${version} ${edition} seed number source`,
+      `best Minecraft ${version} ${edition} seeds ${query} seed`
+    ])
+  ).slice(0, Math.min(Math.max(Math.ceil(candidateCount / 8), 2), 3));
 
-  const data = (await response.json().catch(() => ({}))) as SerperResponse;
+  const allResults: WebSearchSource[] = [];
 
-  if (!response.ok) {
-    throw new Error(data.error || `Serper search failed with status ${response.status}`);
+  for (const searchQuery of searchQueries) {
+    const response = await fetchWithTimeout('https://google.serper.dev/search', {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+        'X-API-KEY': apiKey
+      },
+      body: JSON.stringify({
+        q: searchQuery,
+        num: 10,
+        gl: 'us',
+        hl: 'en'
+      })
+    }, 12000);
+
+    const data = (await response.json().catch(() => ({}))) as SerperResponse;
+
+    if (!response.ok) {
+      throw new Error(data.error || `Serper search failed with status ${response.status}`);
+    }
+
+    allResults.push(
+      ...(data.organic || [])
+        .filter((result) => result.link && result.title)
+        .map((result) => ({
+          title: result.title,
+          url: result.link,
+          website: hostFromUrl(result.link),
+          evidence: result.snippet || 'Search result from Serper',
+          snippet: result.snippet || ''
+        }))
+    );
   }
 
-  const results = (data.organic || [])
-    .filter((result) => result.link && result.title)
-    .slice(0, 8)
-    .map((result) => ({
-      title: result.title,
-      url: result.link,
-      website: hostFromUrl(result.link),
-      evidence: result.snippet || 'Search result from Serper',
-      snippet: result.snippet || ''
-    }));
-
-  const unique = uniqueSources(results) as WebSearchSource[];
+  const unique = uniqueSources(allResults).slice(0, Math.max(candidateCount, 12)) as WebSearchSource[];
   const enriched = await Promise.all(
-    unique.slice(0, 5).map(async (source) => ({
+    unique.slice(0, Math.min(unique.length, 10)).map(async (source) => ({
       ...source,
       content: source.url ? await readSourceWithJina(source.url) : ''
     }))
   );
 
-  return [...enriched, ...unique.slice(5)];
+  return [...enriched, ...unique.slice(enriched.length)];
 }
 
 function buildSearchResultPrompt(query: string, edition: string, version: string, count: number, sources: WebSearchSource[]) {
@@ -698,6 +721,7 @@ export async function POST(request: NextRequest) {
     const edition = String(body.edition || 'Any').trim();
     const version = String(body.version || 'Latest stable').trim();
     const count = Math.min(Math.max(Number(body.count) || 5, 1), 8);
+    const candidateCount = getCandidateCount(count);
 
     if (query.length < 8) {
       return NextResponse.json({ error: 'Please describe the seed you want in more detail.' }, { status: 400 });
@@ -709,7 +733,7 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ...(cachedPayload as Record<string, unknown>), cached: true });
     }
 
-    const prompt = buildPrompt(query, edition, version, count);
+    const prompt = buildPrompt(query, edition, version, candidateCount);
     let text = '';
     let rawGroundingSources: Source[] = [];
     let provider = 'google-grounding';
@@ -733,12 +757,12 @@ export async function POST(request: NextRequest) {
         // Still try the fallback once; many model/tool errors can be recovered with Serper + Groq.
       }
 
-      const serperSources = await searchWithSerper(serperApiKey, query, edition, version);
+      const serperSources = await searchWithSerper(serperApiKey, query, edition, version, candidateCount);
       if (!serperSources.length) {
         throw new Error('Google AI failed and Serper returned no web results for this seed request.');
       }
 
-      const groqPrompt = buildSearchResultPrompt(query, edition, version, count, serperSources);
+      const groqPrompt = buildSearchResultPrompt(query, edition, version, candidateCount, serperSources);
       const groqResult = await searchSeedsWithGroq(groqKeys, groqPrompt);
       text = groqResult.text;
       rawGroundingSources = serperSources;
