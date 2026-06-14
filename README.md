@@ -119,3 +119,42 @@ UPSTASH_REDIS_REST_TOKEN=your_upstash_rest_token
 If these variables are missing, the site still works and uses the visitor's browser storage only.
 
 The seed library section also includes an Adsterra native ad placement.
+
+## JSON repair + separate saved section
+
+If Gemini returns malformed JSON, the API route now tries an automatic Gemini JSON repair pass without Google Search before failing. The homepage seed library is split into two sections:
+
+- Built-in preloaded seeds
+- AI saved seeds, with its own Adsterra ad placement
+
+## Seed tags + stronger JSON stability
+
+Seed cards now support short tags such as `Village`, `Java`, `1.21`, and `Trial Chamber`.
+
+To reduce malformed JSON errors from Gemini Search grounding, the route now uses a safer two-step flow:
+
+1. Gemini + Google Search returns compact research notes.
+2. Gemini without search converts the notes into strict JSON using `responseMimeType: application/json`.
+
+This avoids most errors like `Bad control character in string literal` and `Expected ':' after property name`.
+
+## Saved seeds tab
+
+The homepage seed library is now a tabbed section with:
+
+- **AI Saved Seeds** tab
+- **Built-in Seeds** tab
+
+The Saved Seeds tab includes its own ad placement and is linked from the footer.
+
+## Saved tab in-feed ads + seed details
+
+The Saved Seeds tab now shows full seed details on each card:
+
+- Why this seed
+- What is where / coordinates
+- Source links and evidence
+- Notes
+- Tags
+
+It also adds in-feed Adsterra native ads inside the Saved Seeds tab after every 3 saved seed cards.

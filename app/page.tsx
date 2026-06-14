@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useEffect, useMemo, useState } from 'react';
+import { Fragment, FormEvent, useEffect, useMemo, useState } from 'react';
 import { AdsterraBannerAd, AdsterraNativeBannerAd, AdsterraSocialBar } from './components/AdsterraAds';
 
 type Feature = {
@@ -24,6 +24,7 @@ type SeedResult = {
   version?: string;
   spawn?: string;
   confidence?: string;
+  tags?: string[];
   whyMatches?: string;
   features?: Feature[];
   sources?: Source[];
@@ -216,6 +217,27 @@ function uniqueSeeds(seeds: SeedResult[]) {
   });
 }
 
+function seedTags(seed: SeedResult) {
+  const fromSeed = Array.isArray(seed.tags) ? seed.tags : [];
+  const generated = [
+    seed.edition,
+    seed.version,
+    ...(seed.features || []).flatMap((feature) => [feature.type, feature.name])
+  ];
+
+  const seen = new Set<string>();
+  return [...fromSeed, ...generated]
+    .map((tag) => String(tag || '').trim())
+    .filter((tag) => tag && tag.length <= 32)
+    .filter((tag) => {
+      const key = tag.toLowerCase();
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    })
+    .slice(0, 6);
+}
+
 function normalizeSources(sources?: Source[]) {
   if (!sources) return [];
   const seen = new Set<string>();
@@ -239,6 +261,7 @@ export default function Home() {
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
   const [copiedSeed, setCopiedSeed] = useState('');
+  const [activeSeedTab, setActiveSeedTab] = useState<'preloaded' | 'saved'>('saved');
 
   const allSources = useMemo(() => {
     const fromSeeds = result?.seeds?.flatMap((seed) => seed.sources || []) || [];
@@ -247,6 +270,8 @@ export default function Home() {
 
   const resultOptions = ['5', '10', '15', '20'];
   const librarySeeds = useMemo(() => uniqueSeeds([...PRELOADED_SEEDS, ...globalSeeds, ...savedSeeds]), [globalSeeds, savedSeeds]);
+  const aiSavedSeeds = useMemo(() => uniqueSeeds([...globalSeeds, ...savedSeeds]), [globalSeeds, savedSeeds]);
+  const activeLibrarySeeds = activeSeedTab === 'preloaded' ? PRELOADED_SEEDS : aiSavedSeeds;
 
   useEffect(() => {
     try {
@@ -517,6 +542,12 @@ export default function Home() {
                     {seed.spawn && <span className="meta">Spawn: {seed.spawn}</span>}
                   </div>
 
+                  {!!seedTags(seed).length && (
+                    <div className="tag-row">
+                      {seedTags(seed).map((tag) => <span className="tag-chip" key={tag}>{tag}</span>)}
+                    </div>
+                  )}
+
                   <div className="seed-box">
                     <div className="seed-value">{seed.seed || 'Seed not shown by source'}</div>
                     <button className="copy-btn" type="button" onClick={() => copySeed(seed.seed)}>
@@ -597,40 +628,129 @@ export default function Home() {
         )}
       </section>
 
-      <section className="seed-library-section">
+      <section className="seed-library-section seed-tabs-section" id="seed-library">
         <div className="seo-section-head">
-          <span className="badge">💾 Saved seed library</span>
-          <h2>Preloaded + AI saved seeds</h2>
+          <span className="badge">💾 Seed library</span>
+          <h2>Saved seeds tab</h2>
           <p>
-            These seeds are available without a new AI call. When Gemini finds new verified seeds,
-            they are saved here with sources and details. {globalLibraryReady ? 'Global database is connected.' : 'Global database env is not connected yet, so browser saving is used.'}
+            Use the tabs below to switch between built-in seeds and AI saved seeds.
+            {globalLibraryReady ? ' Global database is connected, so saved seeds can appear for all users.' : ' Global database is not connected yet, so this browser saves local seeds only.'}
           </p>
         </div>
-        <AdsterraNativeBannerAd label="Seed library advertisement" className="results-ad library-ad" />
-        <div className="library-grid">
-          {librarySeeds.slice(0, 12).map((seed, index) => (
-            <article className="library-card" key={`${seed.seed}-${index}`}>
-              <div className="seed-top">
-                <h3>{seed.title || 'Saved seed'}</h3>
-                <span className="confidence">{seed.confidence || 'Saved'}</span>
-              </div>
-              <div className="seed-value small">{seed.seed}</div>
-              <div className="meta-row">
-                <span className="meta">{seed.edition}</span>
-                <span className="meta">{seed.version}</span>
-              </div>
-              {seed.spawn && <p>{seed.spawn}</p>}
-              {!!seed.sources?.[0]?.url && (
-                <a href={seed.sources[0].url} target="_blank" rel="noreferrer">
-                  Source: {seed.sources[0].website || seed.sources[0].title || 'Open'}
-                </a>
-              )}
-              <button className="secondary-btn library-copy" type="button" onClick={() => copySeed(seed.seed)}>
-                {copiedSeed === seed.seed ? 'Copied' : 'Copy seed'}
-              </button>
-            </article>
-          ))}
+
+        <div className="seed-tabs" role="tablist" aria-label="Seed library tabs">
+          <button
+            className={`seed-tab ${activeSeedTab === 'saved' ? 'active' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={activeSeedTab === 'saved'}
+            onClick={() => setActiveSeedTab('saved')}
+          >
+            💾 AI Saved Seeds <span>{aiSavedSeeds.length}</span>
+          </button>
+          <button
+            className={`seed-tab ${activeSeedTab === 'preloaded' ? 'active' : ''}`}
+            type="button"
+            role="tab"
+            aria-selected={activeSeedTab === 'preloaded'}
+            onClick={() => setActiveSeedTab('preloaded')}
+          >
+            📦 Built-in Seeds <span>{PRELOADED_SEEDS.length}</span>
+          </button>
         </div>
+
+        {activeSeedTab === 'saved' && (
+          <AdsterraNativeBannerAd label="Saved seeds advertisement" className="results-ad library-ad" />
+        )}
+
+        {activeLibrarySeeds.length ? (
+          <div className="library-grid detailed-library-grid">
+            {activeLibrarySeeds.slice(0, 12).map((seed, index) => (
+              <Fragment key={`${activeSeedTab}-${seed.seed}-${index}`}>
+                <article className="library-card detailed-library-card">
+                  <div className="seed-top">
+                    <h3>{seed.title || (activeSeedTab === 'saved' ? 'Saved seed' : 'Preloaded seed')}</h3>
+                    <span className="confidence">{seed.confidence || (activeSeedTab === 'saved' ? 'Saved' : 'Preloaded')}</span>
+                  </div>
+                  <div className="seed-value small">{seed.seed}</div>
+                  <div className="meta-row">
+                    <span className="meta">{seed.edition}</span>
+                    <span className="meta">{seed.version}</span>
+                    {seed.spawn && <span className="meta">Spawn: {seed.spawn}</span>}
+                  </div>
+                  {!!seedTags(seed).length && (
+                    <div className="tag-row compact">
+                      {seedTags(seed).map((tag) => <span className="tag-chip" key={tag}>{tag}</span>)}
+                    </div>
+                  )}
+
+                  {seed.whyMatches && (
+                    <div className="library-detail-block">
+                      <h4>Why this seed</h4>
+                      <p>{seed.whyMatches}</p>
+                    </div>
+                  )}
+
+                  {!!seed.features?.length && (
+                    <div className="library-detail-block">
+                      <h4>What is where</h4>
+                      <ul className="library-feature-list">
+                        {seed.features.slice(0, 6).map((feature, featureIndex) => (
+                          <li key={`${feature.name || feature.type}-${featureIndex}`}>
+                            <strong>{feature.name || feature.type || 'Location'}</strong>
+                            {feature.coordinates && <span>{feature.coordinates}</span>}
+                            {feature.description && <p>{feature.description}</p>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {!!seed.sources?.length && (
+                    <div className="library-detail-block">
+                      <h4>Sources</h4>
+                      <ul className="library-source-list">
+                        {normalizeSources(seed.sources).slice(0, 3).map((source, sourceIndex) => (
+                          <li key={`${source.url || source.title}-${sourceIndex}`}>
+                            {source.url ? (
+                              <a href={source.url} target="_blank" rel="noreferrer">
+                                {source.title || source.website || 'Open source'}
+                              </a>
+                            ) : (
+                              <strong>{source.title || source.website || 'Source'}</strong>
+                            )}
+                            {source.evidence && <p>{source.evidence}</p>}
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+
+                  {seed.notes && (
+                    <div className="library-detail-block">
+                      <h4>Notes</h4>
+                      <p>{seed.notes}</p>
+                    </div>
+                  )}
+
+                  <button className="secondary-btn library-copy" type="button" onClick={() => copySeed(seed.seed)}>
+                    {copiedSeed === seed.seed ? 'Copied' : 'Copy seed'}
+                  </button>
+                </article>
+
+                {activeSeedTab === 'saved' && (index + 1) % 3 === 0 && (
+                  <div className="library-inline-ad">
+                    <AdsterraNativeBannerAd label="Saved seeds in-feed advertisement" className="results-ad library-ad" />
+                  </div>
+                )}
+              </Fragment>
+            ))}
+          </div>
+        ) : (
+          <div className="empty-card library-empty">
+            No AI-saved seeds yet. Run a Gemini search; verified results will be saved in this tab automatically.
+          </div>
+        )}
       </section>
 
       <section className="seo-section">
@@ -657,6 +777,7 @@ export default function Home() {
       <footer className="footer">
         <div>Built for Vercel. Keep your Google AI key in environment variables only.</div>
         <nav className="footer-links" aria-label="Footer links">
+          <a href="#seed-library">Saved Seeds</a>
           <a href="/seed-guides">Seed Guides</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
