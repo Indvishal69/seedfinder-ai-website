@@ -58,3 +58,46 @@ Use a model that supports Google Search grounding. The API route tries search-en
 ## Notes
 
 Minecraft world generation can change between versions. Always verify a seed in the exact Minecraft edition/version shown by the source website.
+
+## Multiple Google AI keys / quota failover
+
+The API route supports multiple legitimate Gemini API keys for failover:
+
+```env
+GOOGLE_AI_API_KEYS=key_1,key_2,key_3
+```
+
+or:
+
+```env
+GOOGLE_AI_API_KEY=primary_key
+GOOGLE_AI_API_KEY_2=second_key
+GOOGLE_AI_API_KEY_3=third_key
+```
+
+Important: do not use multiple keys/accounts to bypass provider limits. Keys from the same Google Cloud / AI Studio project usually share the same quota. For public traffic, enable billing or request higher quota.
+
+The route also includes a small 6-hour in-memory cache for identical searches to reduce repeated API calls.
+
+## Groq + Serper fallback
+
+Groq models do not browse the internet by themselves. The project supports a fallback flow:
+
+```text
+Serper search API -> Groq JSON formatting -> website seed cards
+```
+
+Add these Vercel environment variables:
+
+```env
+GROQ_API_KEY=your_first_groq_key
+GROQ_API_KEY_2=your_second_groq_key
+GROQ_MODEL=llama-3.1-8b-instant
+SERPER_API_KEY=your_serper_key
+```
+
+Without `SERPER_API_KEY`, Groq fallback is not used for real seed search because it cannot verify source websites on its own.
+
+## Local LLM note
+
+A local LLM cannot run inside a normal Vercel serverless project. You can run Ollama on your own PC/VPS and expose a secure API endpoint, but that requires the machine to stay online and it still needs a search API for live web results.
