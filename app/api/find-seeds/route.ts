@@ -1,5 +1,4 @@
 import { NextRequest, NextResponse } from 'next/server';
-import { getGlobalSearchResult, saveGlobalSeedResult } from '../../lib/globalSeedLibrary';
 
 export const runtime = 'nodejs';
 export const dynamic = 'force-dynamic';
@@ -48,7 +47,7 @@ type WebSearchSource = Source & {
 };
 
 const DEFAULT_MODEL = 'gemini-2.5-flash-lite';
-const DEFAULT_GROQ_MODEL = 'llama-3.3-70b-versatile';
+const DEFAULT_GROQ_MODEL = 'llama-3.1-8b-instant';
 const CACHE_TTL_MS = 1000 * 60 * 60 * 6;
 const MAX_CACHE_ITEMS = 100;
 
@@ -121,17 +120,16 @@ function shortKeyLabel(index: number) {
 }
 
 function getCandidateCount(requestedCount: number) {
-  // Ask Gemini for more candidates because strict verification removes weak/dead-source results.
-  return Math.min(Math.max(requestedCount * 2, requestedCount, 8), 30);
+  // Ask providers for more candidates because strict verification removes weak/dead-source results.
+  return Math.min(Math.max(requestedCount * 4, 12), 20);
 }
 
-function makeCacheKey(query: string, edition: string, version: string, count: number, providerMode: string) {
+function makeCacheKey(query: string, edition: string, version: string, count: number) {
   return JSON.stringify({
     query: query.toLowerCase().replace(/\s+/g, ' ').trim(),
     edition: edition.toLowerCase().trim(),
     version: version.toLowerCase().trim(),
-    count,
-    providerMode
+    count
   });
 }
 
@@ -168,133 +166,19 @@ function cleanJsonText(text: string) {
     .trim();
 }
 
-function sliceJsonObject(text: string) {
-  const cleaned = cleanJsonText(text);
-  const first = cleaned.indexOf('{');
-  const last = cleaned.lastIndexOf('}');
-
-  if (first >= 0 && last > first) {
-    return cleaned.slice(first, last + 1);
-  }
-
-  return cleaned;
-}
-
-function escapeControlCharactersInStrings(jsonText: string) {
-  let output = '';
-  let inString = false;
-  let escaped = false;
-
-  for (let i = 0; i < jsonText.length; i += 1) {
-    const char = jsonText[i];
-
-    if (escaped) {
-      output += char;
-      escaped = false;
-      continue;
-    }
-
-    if (char === '\\' && inString) {
-      output += char;
-      escaped = true;
-      continue;
-    }
-
-    if (char === '"') {
-      inString = !inString;
-      output += char;
-      continue;
-    }
-
-    if (inString) {
-      const code = char.charCodeAt(0);
-      if (code <= 0x1f) {
-        if (char === '\n') output += '\\n';
-        else if (char === '\r') output += '\\r';
-        else if (char === '\t') output += '\\t';
-        else output += ' ';
-        continue;
-      }
-    }
-
-    output += char;
-  }
-
-  return output;
-}
-
-function removeTrailingCommas(jsonText: string) {
-  let output = '';
-  let inString = false;
-  let escaped = false;
-
-  for (let i = 0; i < jsonText.length; i += 1) {
-    const char = jsonText[i];
-
-    if (escaped) {
-      output += char;
-      escaped = false;
-      continue;
-    }
-
-    if (char === '\\' && inString) {
-      output += char;
-      escaped = true;
-      continue;
-    }
-
-    if (char === '"') {
-      inString = !inString;
-      output += char;
-      continue;
-    }
-
-    if (!inString && char === ',') {
-      let j = i + 1;
-      while (j < jsonText.length && /\s/.test(jsonText[j])) j += 1;
-      if (jsonText[j] === '}' || jsonText[j] === ']') {
-        continue;
-      }
-    }
-
-    output += char;
-  }
-
-  return output;
-}
-
-function repairLikelyJson(text: string) {
-  let repaired = sliceJsonObject(text)
-    .replace(/^\uFEFF/, '')
-    .replace(/[“”]/g, '"')
-    .replace(/[‘’]/g, "'")
-    .replace(/\bundefined\b/g, 'null')
-    .replace(/\bNaN\b/g, 'null');
-
-  repaired = escapeControlCharactersInStrings(repaired);
-  repaired = removeTrailingCommas(repaired);
-
-  // Repair rare LLM output like: { query: "..." } -> { "query": "..." }
-  repaired = repaired.replace(/([{,]\s*)([A-Za-z_$][A-Za-z0-9_$-]*)(\s*:)/g, '$1"$2"$3');
-
-  return removeTrailingCommas(repaired);
-}
-
 function extractJson(text: string) {
-  const candidates = [sliceJsonObject(text), repairLikelyJson(text)];
-  const errors: string[] = [];
+  const cleaned = cleanJsonText(text);
 
-  for (const candidate of candidates) {
-    try {
-      return JSON.parse(candidate);
-    } catch (error) {
-      errors.push(error instanceof Error ? error.message : String(error));
+  try {
+    return JSON.parse(cleaned);
+  } catch {
+    const first = cleaned.indexOf('{');
+    const last = cleaned.lastIndexOf('}');
+    if (first >= 0 && last > first) {
+      return JSON.parse(cleaned.slice(first, last + 1));
     }
+    throw new Error('Google AI did not return valid JSON. Please try again with a clearer seed request.');
   }
-
-  throw new Error(
-    `AI returned malformed JSON and automatic repair failed. Please try again. Parse errors: ${errors.slice(-2).join(' | ')}`
-  );
 }
 
 function hostFromUrl(url?: string) {
@@ -638,7 +522,7 @@ async function fetchWithTimeout(url: string, options: RequestInit = {}, timeoutM
   }
 }
 
-async function readSourceWithJina(url: string, maxChars = 900) {
+async function readSourceWithJina(url: string) {
   try {
     const response = await fetchWithTimeout(`https://r.jina.ai/${url}`, {
       headers: {
@@ -649,7 +533,7 @@ async function readSourceWithJina(url: string, maxChars = 900) {
 
     if (!response.ok) return '';
     const text = await response.text();
-    return text.replace(/\s+/g, ' ').slice(0, maxChars);
+    return text.replace(/\s+/g, ' ').slice(0, 2400);
   } catch {
     return '';
   }
@@ -706,14 +590,11 @@ async function searchWithSerper(
     );
   }
 
-  const sourceLimit = Math.min(Math.max(candidateCount, 10), 15);
-  const enrichLimit = Math.min(sourceLimit, 6);
-  const extractChars = candidateCount > 12 ? 700 : 900;
-  const unique = uniqueSources(allResults).slice(0, sourceLimit) as WebSearchSource[];
+  const unique = uniqueSources(allResults).slice(0, Math.max(candidateCount, 12)) as WebSearchSource[];
   const enriched = await Promise.all(
-    unique.slice(0, Math.min(unique.length, enrichLimit)).map(async (source) => ({
+    unique.slice(0, Math.min(unique.length, 10)).map(async (source) => ({
       ...source,
-      content: source.url ? await readSourceWithJina(source.url, extractChars) : ''
+      content: source.url ? await readSourceWithJina(source.url) : ''
     }))
   );
 
@@ -722,13 +603,12 @@ async function searchWithSerper(
 
 function buildSearchResultPrompt(query: string, edition: string, version: string, count: number, sources: WebSearchSource[]) {
   const sourceText = sources
-    .slice(0, Math.min(sources.length, count > 10 ? 12 : 10))
     .map((source, index) => {
       return `[${index + 1}] ${source.title || 'Untitled'}
 Website: ${source.website || hostFromUrl(source.url)}
 URL: ${source.url}
-Search snippet: ${(source.snippet || source.evidence || 'not provided').slice(0, 320)}
-Page extract: ${(source.content || 'not available').slice(0, count > 10 ? 700 : 900)}
+Search snippet: ${source.snippet || source.evidence || 'not provided'}
+Page extract: ${source.content || 'not available'}
 `;
     })
     .join('\n---\n');
@@ -739,8 +619,6 @@ You do not have live browsing in this step. Use ONLY the search results and page
 If the provided search results do not contain enough information for an exact seed number/string, Java/Bedrock edition, version, and source URL, omit that result.
 Never output "not provided by source", "unknown", or similar text in the seed, edition, or version fields.
 Every returned seed must cite one or more URLs from this provided source list.
-Keep each seed concise: max 3 features, max 2 sources, notes under 160 characters.
-If you cannot fit all requested seeds in valid JSON, return fewer complete valid seeds instead of broken JSON.
 
 Provided web search results:
 ${sourceText}`;
@@ -764,7 +642,7 @@ async function callGroq(apiKey: string, model: string, prompt: string) {
         { role: 'user', content: prompt }
       ],
       temperature: 0.15,
-      max_tokens: model.toLowerCase().includes('70b') ? 4200 : 1600
+      max_tokens: 6000
     })
   }, 20000);
 
@@ -784,9 +662,7 @@ async function callGroq(apiKey: string, model: string, prompt: string) {
 
 async function searchSeedsWithGroq(groqKeys: string[], prompt: string) {
   const requestedModel = (process.env.GROQ_MODEL || DEFAULT_GROQ_MODEL).trim();
-  const models = Array.from(
-    new Set([requestedModel, DEFAULT_GROQ_MODEL, 'llama-3.3-70b-versatile', 'llama-3.1-8b-instant'].filter(Boolean))
-  );
+  const models = Array.from(new Set([requestedModel, DEFAULT_GROQ_MODEL, 'llama-3.3-70b-versatile'].filter(Boolean)));
   const errors: string[] = [];
 
   for (let keyIndex = 0; keyIndex < groqKeys.length; keyIndex += 1) {
@@ -794,10 +670,7 @@ async function searchSeedsWithGroq(groqKeys: string[], prompt: string) {
 
     for (const model of models) {
       try {
-        const result = await callGroq(apiKey, model, prompt);
-        // Validate now so a truncated/malformed 8B response can fall through to the next key/model.
-        extractJson(result.text);
-        return result;
+        return await callGroq(apiKey, model, prompt);
       } catch (error) {
         errors.push(`${shortKeyLabel(keyIndex)}/${model}: ${error instanceof Error ? error.message : String(error)}`);
       }
@@ -837,7 +710,7 @@ export async function POST(request: NextRequest) {
     if (!apiKeys.length) {
       return NextResponse.json(
         {
-          error: 'Gemini mode needs GOOGLE_AI_API_KEY and/or GOOGLE_AI_API_KEY_2 in Vercel Environment Variables.'
+          error: 'Missing Google AI API key. Add GOOGLE_AI_API_KEY or GOOGLE_AI_API_KEYS in Vercel Environment Variables or .env.local for local testing.'
         },
         { status: 500 }
       );
@@ -847,40 +720,58 @@ export async function POST(request: NextRequest) {
     const query = String(body.query || '').trim();
     const edition = String(body.edition || 'Any').trim();
     const version = String(body.version || 'Latest stable').trim();
-    // No Gemini-mode 5-result cap anymore. UI controls the requested count; server keeps a safety cap.
-    const count = Math.min(Math.max(Number(body.count) || 5, 1), 30);
+    const count = Math.min(Math.max(Number(body.count) || 5, 1), 8);
     const candidateCount = getCandidateCount(count);
 
     if (query.length < 8) {
       return NextResponse.json({ error: 'Please describe the seed you want in more detail.' }, { status: 400 });
     }
 
-    const cacheKey = makeCacheKey(query, edition, version, count, 'gemini');
+    const cacheKey = makeCacheKey(query, edition, version, count);
     const cachedPayload = getCachedPayload(cacheKey);
     if (cachedPayload) {
-      return NextResponse.json({ ...(cachedPayload as Record<string, unknown>), cached: true, provider: 'server-cache' });
-    }
-
-    const globalCachedPayload = await getGlobalSearchResult<Record<string, unknown>>(cacheKey);
-    if (globalCachedPayload) {
-      setCachedPayload(cacheKey, globalCachedPayload);
-      return NextResponse.json({ ...globalCachedPayload, cached: true, provider: 'global-seed-database' });
+      return NextResponse.json({ ...(cachedPayload as Record<string, unknown>), cached: true });
     }
 
     const prompt = buildPrompt(query, edition, version, candidateCount);
-    const googleResult = await searchSeeds(apiKeys, prompt);
-    const text = googleResult.text;
-    const rawGroundingSources = groundingSources(googleResult.data);
-    const provider = 'gemini-google-search';
-    const providerMode = 'gemini';
+    let text = '';
+    let rawGroundingSources: Source[] = [];
+    let provider = 'google-grounding';
+
+    try {
+      const googleResult = await searchSeeds(apiKeys, prompt);
+      text = googleResult.text;
+      rawGroundingSources = groundingSources(googleResult.data);
+    } catch (googleError) {
+      const serperApiKey = getSerperApiKey();
+      const groqKeys = getGroqApiKeys();
+
+      if (!serperApiKey || !groqKeys.length) {
+        throw new Error(
+          `${googleError instanceof Error ? googleError.message : String(googleError)} ` +
+            `Groq fallback needs both SERPER_API_KEY for web search and GROQ_API_KEY / GROQ_API_KEY_2 for JSON formatting. Groq or local LLM alone cannot search the live web.`
+        );
+      }
+
+      if (!isQuotaLikeError(googleError)) {
+        // Still try the fallback once; many model/tool errors can be recovered with Serper + Groq.
+      }
+
+      const serperSources = await searchWithSerper(serperApiKey, query, edition, version, candidateCount);
+      if (!serperSources.length) {
+        throw new Error('Google AI failed and Serper returned no web results for this seed request.');
+      }
+
+      const groqPrompt = buildSearchResultPrompt(query, edition, version, candidateCount, serperSources);
+      const groqResult = await searchSeedsWithGroq(groqKeys, groqPrompt);
+      text = groqResult.text;
+      rawGroundingSources = serperSources;
+      provider = 'serper-groq';
+    }
 
     const parsed = extractJson(text);
 
-    const { validSeeds: seeds, rejected } = await sanitizeSeedResults(
-      Array.isArray(parsed.seeds) ? parsed.seeds : [],
-      count,
-      rawGroundingSources
-    );
+    const { validSeeds: seeds, rejected } = await sanitizeSeedResults(Array.isArray(parsed.seeds) ? parsed.seeds : [], count, rawGroundingSources);
 
     if (!seeds.length) {
       throw new Error(
@@ -900,19 +791,11 @@ export async function POST(request: NextRequest) {
       rawGroundingSources,
       seeds,
       provider,
-      providerMode,
-      requestedResults: count,
       rejectedResults: rejected.slice(0, 5),
       cached: false
     };
 
     setCachedPayload(cacheKey, payload);
-
-    try {
-      await saveGlobalSeedResult(cacheKey, payload, seeds);
-    } catch (saveError) {
-      console.warn('Global seed database save failed:', saveError);
-    }
 
     return NextResponse.json(payload);
   } catch (error) {
