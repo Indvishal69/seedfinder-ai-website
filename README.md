@@ -79,41 +79,43 @@ Important: do not use multiple keys/accounts to bypass provider limits. Keys fro
 
 The route also includes a small 6-hour in-memory cache for identical searches to reduce repeated API calls.
 
-## Groq + Serper fallback
-
-Groq models do not browse the internet by themselves. The project supports a fallback flow:
-
-```text
-Serper search API -> Groq JSON formatting -> website seed cards
-```
-
-Add these Vercel environment variables:
-
-```env
-GROQ_API_KEY=your_first_groq_key
-GROQ_API_KEY_2=your_second_groq_key
-GROQ_MODEL=llama-3.1-8b-instant
-SERPER_API_KEY=your_serper_key
-```
-
-Without `SERPER_API_KEY`, Groq fallback is not used for real seed search because it cannot verify source websites on its own.
-
 ## Local LLM note
 
 A local LLM cannot run inside a normal Vercel serverless project. You can run Ollama on your own PC/VPS and expose a secure API endpoint, but that requires the machine to stay online and it still needs a search API for live web results.
 
-## Provider modes
+## Current AI mode
 
-The website has two user-selectable modes:
+The live app uses Gemini API keys with Google Search grounding only. Serper and Groq are not used by the active seed search route.
 
-1. **Gemini Google Search**
-   - Uses Google AI Search grounding only.
-   - Does not use Serper.
-   - Capped at 5 verified seeds.
+Supported Gemini key variables:
 
-2. **Groq + Serper Search**
-   - Uses Serper for web search.
-   - Uses Groq for JSON formatting.
-   - Lets users request 10 or 15 verified seeds.
+```env
+GOOGLE_AI_API_KEY=first_key
+GOOGLE_AI_API_KEY_2=second_key
+```
 
-Both modes still filter out missing seeds, unknown edition/version, and dead source URLs.
+or:
+
+```env
+GOOGLE_AI_API_KEYS=key_1,key_2
+```
+
+The homepage also includes a browser-based seed library. Preloaded seeds are shown by default, and verified AI results are saved in the visitor's browser so repeated searches can be returned without another API call. For global saved seeds across all users, add a database such as Vercel KV, Upstash Redis, or Supabase.
+
+## Global saved seed library
+
+The site supports a global saved seed database with Upstash Redis. When Gemini returns verified seeds, the server saves:
+
+- the full search result for repeated same searches
+- each seed card in the global seed library
+
+Add these Vercel environment variables:
+
+```env
+UPSTASH_REDIS_REST_URL=https://your-upstash-db.upstash.io
+UPSTASH_REDIS_REST_TOKEN=your_upstash_rest_token
+```
+
+If these variables are missing, the site still works and uses the visitor's browser storage only.
+
+The seed library section also includes an Adsterra native ad placement.

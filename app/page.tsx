@@ -1,6 +1,6 @@
 'use client';
 
-import { FormEvent, useMemo, useState } from 'react';
+import { FormEvent, useEffect, useMemo, useState } from 'react';
 import { AdsterraBannerAd, AdsterraNativeBannerAd, AdsterraSocialBar } from './components/AdsterraAds';
 
 type Feature = {
@@ -38,7 +38,7 @@ type ApiResult = {
   websitesUsed?: Source[];
   rawGroundingSources?: Source[];
   provider?: string;
-  providerMode?: 'gemini' | 'groq';
+  providerMode?: string;
   cached?: boolean;
   requestedResults?: number;
 };
@@ -49,6 +49,172 @@ const examples = [
   'Java seed with ancient city under spawn and cherry grove near mountains',
   'Speedrun style seed with ruined portal, village, and stronghold coordinates'
 ];
+
+const SAVED_SEARCHES_KEY = 'seedfinder:saved-searches:v1';
+const SAVED_SEEDS_KEY = 'seedfinder:saved-seeds:v1';
+
+const PRELOADED_SEEDS: SeedResult[] = [
+  {
+    title: 'Quick Minecraft 1.21 Beginning',
+    seed: '-6538244134311383951',
+    edition: 'Java',
+    version: '1.21',
+    spawn: 'Desert spawn with a village nearby.',
+    confidence: 'Preloaded',
+    whyMatches: 'A strong starter seed with a village and quick trial chamber access.',
+    features: [
+      { name: 'Desert Village', type: 'Village', coordinates: 'X: 160 Z: 50', description: 'Village close to spawn.' },
+      { name: 'Trial Chamber', type: 'Trial Chamber', coordinates: 'below/near village', description: 'Source describes quick trial chamber access.' }
+    ],
+    sources: [
+      {
+        title: '25 Best Minecraft 1.21 Seeds to Try (Java & Bedrock) - Beebom',
+        website: 'beebom.com',
+        url: 'https://beebom.com/best-minecraft-1-21-seeds/',
+        evidence: 'Source lists Seed Code -6538244134311383951 for Java 1.21 with village coordinates.'
+      }
+    ],
+    notes: 'Preloaded library seed. Verify in the listed version before long-term play.'
+  },
+  {
+    title: 'Village in Ancient City Spawn',
+    seed: '2422215857861955386',
+    edition: 'Java',
+    version: '1.20 - 1.21.11',
+    spawn: 'Spawn coordinates around X: 19 Y: -50 Z: -7.',
+    confidence: 'Preloaded',
+    whyMatches: 'Village-focused Java seed with ancient city and multiple nearby structures listed by source.',
+    features: [
+      { name: 'Village #1', type: 'Village', coordinates: '179, -720', description: 'Plains village.' },
+      { name: 'Village #2', type: 'Village', coordinates: '784, -272', description: 'Plains village.' },
+      { name: 'Woodland Mansion', type: 'Mansion', coordinates: '495, 843', description: 'Mansion listed by source.' }
+    ],
+    sources: [
+      {
+        title: 'Village in ancient city spawn - WiseHosting',
+        website: 'wisehosting.com',
+        url: 'https://wisehosting.com/minecraft-seeds/village-in-ancient-city-spawn',
+        evidence: 'Source lists Java seed 2422215857861955386 with 1.20-1.21.11 compatibility and coordinates.'
+      }
+    ],
+    notes: 'Preloaded library seed. Verify coordinates in your exact version.'
+  },
+  {
+    title: 'Isolated Village on an Ocean',
+    seed: '-2621657933082943030',
+    edition: 'Java',
+    version: '1.20 - 1.21.11',
+    spawn: 'Spawn coordinates around X: 5 Y: 63 Z: 3.',
+    confidence: 'Preloaded',
+    whyMatches: 'A Java ocean/village seed with multiple villages and stronghold details listed by source.',
+    features: [
+      { name: 'Taiga Village', type: 'Village', coordinates: '847, 97', description: 'Village listed by source.' },
+      { name: 'Plains Village', type: 'Village', coordinates: '1184, 592', description: 'Village listed by source.' },
+      { name: 'Stronghold', type: 'Stronghold', coordinates: '1636, -428', description: 'Stronghold listed by source.' }
+    ],
+    sources: [
+      {
+        title: 'Isolated village on an ocean - WiseHosting',
+        website: 'wisehosting.com',
+        url: 'https://wisehosting.com/minecraft-seeds/isolated-village-on-an-ocean',
+        evidence: 'Source lists Java seed -2621657933082943030 with version compatibility and coordinates.'
+      }
+    ],
+    notes: 'Preloaded library seed. Good for ocean/village searches.'
+  },
+  {
+    title: 'Multiple Structures Spawn',
+    seed: '-767300786513247025',
+    edition: 'Java',
+    version: '1.20 - 1.21.11',
+    spawn: 'Spawn coordinates around X: 10 Y: 95 Z: 2.',
+    confidence: 'Preloaded',
+    whyMatches: 'A structure-heavy Java seed with villages, ancient cities, stronghold, and mansion.',
+    features: [
+      { name: 'Village #1', type: 'Village', coordinates: '79, 639', description: 'Plains village.' },
+      { name: 'Ancient City #1', type: 'Ancient City', coordinates: '-232, -136', description: 'Ancient city listed by source.' },
+      { name: 'Woodland Mansion', type: 'Mansion', coordinates: '-863, 1520', description: 'Mansion listed by source.' }
+    ],
+    sources: [
+      {
+        title: 'Multiple structures spawn - WiseHosting',
+        website: 'wisehosting.com',
+        url: 'https://wisehosting.com/minecraft-seeds/multiple-structures-spawn',
+        evidence: 'Source lists Java seed -767300786513247025 with multiple structures and coordinates.'
+      }
+    ],
+    notes: 'Preloaded library seed. Useful for structure-heavy searches.'
+  },
+  {
+    title: 'Twin Islands: Badlands and Jungle',
+    seed: '7850875',
+    edition: 'Java / Bedrock terrain',
+    version: '1.20',
+    spawn: 'Large vertical islands around spawn.',
+    confidence: 'Preloaded',
+    whyMatches: 'Island seed with badlands and jungle island features listed by source.',
+    features: [
+      { name: 'Badlands Island', type: 'Biome / Island', coordinates: 'near spawn', description: 'Small badlands island topped with trees.' },
+      { name: 'Jungle Island', type: 'Biome / Island', coordinates: 'near spawn', description: 'Larger jungle island near spawn.' }
+    ],
+    sources: [
+      {
+        title: 'The best Minecraft seeds in 2026 - PC Gamer',
+        website: 'pcgamer.com',
+        url: 'https://www.pcgamer.com/best-minecraft-seeds/',
+        evidence: 'Source lists Seed 7850875 with version 1.20 and twin-island description.'
+      }
+    ],
+    notes: 'Preloaded library seed. Verify exact structure placement in your edition.'
+  },
+  {
+    title: 'Java & Bedrock Plains Village Hub',
+    seed: '9137002542963915989',
+    edition: 'Java / Bedrock',
+    version: '1.21',
+    spawn: 'Plains village near spawn.',
+    confidence: 'Preloaded',
+    whyMatches: 'Village-focused 1.21 seed listed for both Java and Bedrock.',
+    features: [
+      { name: 'Plains Village', type: 'Village', coordinates: 'near spawn', description: 'Village close to spawn according to source.' },
+      { name: 'Trial Chambers', type: 'Trial Chamber', coordinates: 'nearby', description: 'Accessible trial chambers listed by source.' },
+      { name: 'Ancient City', type: 'Ancient City', coordinates: 'nearby', description: 'Ancient city listed by source.' }
+    ],
+    sources: [
+      {
+        title: 'Minecraft Village Seeds - ExitLag',
+        website: 'exitlag.com',
+        url: 'https://www.exitlag.com/blog/minecraft-village-seeds/',
+        evidence: 'Source lists Seed 9137002542963915989 for Java & Bedrock 1.21.'
+      }
+    ],
+    notes: 'Preloaded library seed. Verify in-game before long-term play.'
+  }
+];
+
+type SavedSearch = {
+  key: string;
+  result: ApiResult;
+};
+
+function makeLocalSearchKey(query: string, edition: string, version: string, count: string) {
+  return JSON.stringify({
+    query: query.toLowerCase().replace(/\s+/g, ' ').trim(),
+    edition: edition.toLowerCase().trim(),
+    version: version.toLowerCase().trim(),
+    count
+  });
+}
+
+function uniqueSeeds(seeds: SeedResult[]) {
+  const seen = new Set<string>();
+  return seeds.filter((seed) => {
+    const key = `${seed.seed || seed.title}-${seed.edition || ''}-${seed.version || ''}`.toLowerCase();
+    if (seen.has(key)) return false;
+    seen.add(key);
+    return true;
+  });
+}
 
 function normalizeSources(sources?: Source[]) {
   if (!sources) return [];
@@ -66,7 +232,9 @@ export default function Home() {
   const [edition, setEdition] = useState('Any');
   const [version, setVersion] = useState('Latest stable');
   const [count, setCount] = useState('5');
-  const [providerMode, setProviderMode] = useState<'gemini' | 'groq'>('gemini');
+  const [savedSeeds, setSavedSeeds] = useState<SeedResult[]>([]);
+  const [globalSeeds, setGlobalSeeds] = useState<SeedResult[]>([]);
+  const [globalLibraryReady, setGlobalLibraryReady] = useState(false);
   const [result, setResult] = useState<ApiResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -77,13 +245,53 @@ export default function Home() {
     return normalizeSources([...(result?.websitesUsed || []), ...fromSeeds, ...(result?.rawGroundingSources || [])]);
   }, [result]);
 
-  const resultOptions = providerMode === 'gemini' ? ['5'] : ['10', '15'];
+  const resultOptions = ['5', '10', '15', '20'];
+  const librarySeeds = useMemo(() => uniqueSeeds([...PRELOADED_SEEDS, ...globalSeeds, ...savedSeeds]), [globalSeeds, savedSeeds]);
 
-  function changeProviderMode(mode: 'gemini' | 'groq') {
-    setProviderMode(mode);
-    setCount(mode === 'gemini' ? '5' : '10');
-    setResult(null);
-    setError('');
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_SEEDS_KEY) || '[]') as SeedResult[];
+      if (Array.isArray(saved)) setSavedSeeds(saved);
+    } catch {
+      setSavedSeeds([]);
+    }
+
+    fetch('/api/seed-library')
+      .then((response) => response.json())
+      .then((data) => {
+        if (Array.isArray(data?.seeds)) setGlobalSeeds(data.seeds);
+        setGlobalLibraryReady(Boolean(data?.configured));
+      })
+      .catch(() => setGlobalLibraryReady(false));
+  }, []);
+
+  function loadSavedSearch(searchKey: string) {
+    try {
+      const saved = JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) || '[]') as SavedSearch[];
+      return saved.find((item) => item.key === searchKey)?.result || null;
+    } catch {
+      return null;
+    }
+  }
+
+  function saveAiResult(searchKey: string, data: ApiResult) {
+    try {
+      const nextSeeds = uniqueSeeds([...(data.seeds || []), ...savedSeeds]).slice(0, 80);
+      setSavedSeeds(nextSeeds);
+      setGlobalSeeds((current) => uniqueSeeds([...(data.seeds || []), ...current]).slice(0, 120));
+      localStorage.setItem(SAVED_SEEDS_KEY, JSON.stringify(nextSeeds));
+
+      const savedSearches = JSON.parse(localStorage.getItem(SAVED_SEARCHES_KEY) || '[]') as SavedSearch[];
+      const nextSearches = [{ key: searchKey, result: data }, ...savedSearches.filter((item) => item.key !== searchKey)].slice(0, 40);
+      localStorage.setItem(SAVED_SEARCHES_KEY, JSON.stringify(nextSearches));
+    } catch {
+      // Browser storage can be blocked; the app should still work.
+    }
+  }
+
+  function findExactLibrarySeed() {
+    const lowerQuery = query.toLowerCase();
+    return librarySeeds.filter((seed) => seed.seed && lowerQuery.includes(String(seed.seed).toLowerCase())).slice(0, Number(count) || 5);
   }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
@@ -96,12 +304,34 @@ export default function Home() {
       return;
     }
 
+    const searchKey = makeLocalSearchKey(query, edition, version, count);
+    const savedSearch = loadSavedSearch(searchKey);
+    if (savedSearch) {
+      setResult({ ...savedSearch, cached: true, provider: 'saved-browser-library' });
+      return;
+    }
+
+    const exactLibraryMatches = findExactLibrarySeed();
+    if (exactLibraryMatches.length) {
+      setResult({
+        query,
+        generatedAt: new Date().toISOString(),
+        disclaimer: 'Returned from your saved seed library. Verify seeds in the listed Minecraft version.',
+        seeds: exactLibraryMatches,
+        websitesUsed: normalizeSources(exactLibraryMatches.flatMap((seed) => seed.sources || [])),
+        rawGroundingSources: [],
+        provider: 'saved-seed-library',
+        cached: true
+      });
+      return;
+    }
+
     setLoading(true);
     try {
       const response = await fetch('/api/find-seeds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, edition, version, count: Number(count), providerMode })
+        body: JSON.stringify({ query, edition, version, count: Number(count) })
       });
 
       const data = await response.json();
@@ -111,6 +341,7 @@ export default function Home() {
       }
 
       setResult(data);
+      saveAiResult(searchKey, data);
     } catch (err) {
       setError(err instanceof Error ? err.message : 'Something went wrong while searching.');
     } finally {
@@ -153,8 +384,8 @@ export default function Home() {
               AI Minecraft <span>Seed Finder</span>
             </h1>
             <p>
-              Describe the Minecraft world you want. Choose Gemini Google Search mode or Groq + Serper mode. The server finds real published seeds,
-              lists source websites, and shows what is located where.
+              Describe the Minecraft world you want. The server uses Gemini with Google Search to find real published seeds, list source websites,
+              and show what is located where. AI results are saved in your browser seed library.
             </p>
           </div>
 
@@ -206,34 +437,13 @@ export default function Home() {
             </div>
 
             <div className="field">
-              <label htmlFor="providerMode">Mode</label>
-              <select
-                id="providerMode"
-                value={providerMode}
-                onChange={(e) => changeProviderMode(e.target.value === 'groq' ? 'groq' : 'gemini')}
-              >
-                <option value="gemini">Gemini Google Search</option>
-                <option value="groq">Groq + Serper Search</option>
-              </select>
-              <small>
-                {providerMode === 'gemini'
-                  ? 'Uses Google Search grounding only. Serper is not used.'
-                  : 'Uses Serper for web search and Groq for JSON results.'}
-              </small>
-            </div>
-
-            <div className="field">
               <label htmlFor="count">Results</label>
               <select id="count" value={count} onChange={(e) => setCount(e.target.value)}>
                 {resultOptions.map((option) => (
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>
-              <small>
-                {providerMode === 'gemini'
-                  ? 'Gemini mode is capped at 5 verified seeds.'
-                  : 'Groq mode can request 10 or 15 verified seeds.'}
-              </small>
+              <small>Gemini Google Search mode. Serper and Groq are not used.</small>
             </div>
           </div>
 
@@ -249,7 +459,7 @@ export default function Home() {
             >
               Try example
             </button>
-            <span className="helper-text">Current mode: {providerMode === 'gemini' ? 'Gemini Google Search, max 5 seeds' : 'Groq + Serper, 10/15 seeds'}.</span>
+            <span className="helper-text">Gemini Google Search only. Same searches return from your saved library/cache.</span>
           </div>
         </form>
 
@@ -264,7 +474,7 @@ export default function Home() {
             <li>Ask for biome style: cherry grove, snow, desert, island, mountains.</li>
           </ul>
           <div className="status-strip">
-            Gemini mode uses Google Search only. Groq mode uses Serper search. Every result is filtered for exact seed, edition, version, and working source URL.
+            This app uses Gemini Google Search only. Generated seeds are saved in your browser library and reused when you ask the same search again.
           </div>
         </aside>
       </section>
@@ -285,7 +495,7 @@ export default function Home() {
                 <h2>Found seeds</h2>
                 <div className="query-pill" title={result.query}>Query: {result.query}</div>
               </div>
-              <div className="query-pill">Mode: {result.providerMode === 'groq' ? 'Groq + Serper' : 'Gemini Google Search'}{result.cached ? ' • cached' : ''}</div>
+              <div className="query-pill">Source: {result.cached ? 'Saved seed library/cache' : 'Gemini Google Search'}</div>
               <div className="query-pill">Generated: {new Date(result.generatedAt).toLocaleString()}</div>
             </div>
 
@@ -385,6 +595,42 @@ export default function Home() {
             )}
           </div>
         )}
+      </section>
+
+      <section className="seed-library-section">
+        <div className="seo-section-head">
+          <span className="badge">💾 Saved seed library</span>
+          <h2>Preloaded + AI saved seeds</h2>
+          <p>
+            These seeds are available without a new AI call. When Gemini finds new verified seeds,
+            they are saved here with sources and details. {globalLibraryReady ? 'Global database is connected.' : 'Global database env is not connected yet, so browser saving is used.'}
+          </p>
+        </div>
+        <AdsterraNativeBannerAd label="Seed library advertisement" className="results-ad library-ad" />
+        <div className="library-grid">
+          {librarySeeds.slice(0, 12).map((seed, index) => (
+            <article className="library-card" key={`${seed.seed}-${index}`}>
+              <div className="seed-top">
+                <h3>{seed.title || 'Saved seed'}</h3>
+                <span className="confidence">{seed.confidence || 'Saved'}</span>
+              </div>
+              <div className="seed-value small">{seed.seed}</div>
+              <div className="meta-row">
+                <span className="meta">{seed.edition}</span>
+                <span className="meta">{seed.version}</span>
+              </div>
+              {seed.spawn && <p>{seed.spawn}</p>}
+              {!!seed.sources?.[0]?.url && (
+                <a href={seed.sources[0].url} target="_blank" rel="noreferrer">
+                  Source: {seed.sources[0].website || seed.sources[0].title || 'Open'}
+                </a>
+              )}
+              <button className="secondary-btn library-copy" type="button" onClick={() => copySeed(seed.seed)}>
+                {copiedSeed === seed.seed ? 'Copied' : 'Copy seed'}
+              </button>
+            </article>
+          ))}
+        </div>
       </section>
 
       <section className="seo-section">
