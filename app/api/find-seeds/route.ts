@@ -124,12 +124,13 @@ function getCandidateCount(requestedCount: number) {
   return Math.min(Math.max(requestedCount * 4, 12), 20);
 }
 
-function makeCacheKey(query: string, edition: string, version: string, count: number) {
+function makeCacheKey(query: string, edition: string, version: string, count: number, providerMode: string) {
   return JSON.stringify({
     query: query.toLowerCase().replace(/\s+/g, ' ').trim(),
     edition: edition.toLowerCase().trim(),
     version: version.toLowerCase().trim(),
-    count
+    count,
+    providerMode
   });
 }
 
@@ -166,19 +167,89 @@ function cleanJsonText(text: string) {
     .trim();
 }
 
-function extractJson(text: string) {
+function sliceJsonObject(text: string) {
   const cleaned = cleanJsonText(text);
+  const first = cleaned.indexOf('{');
+  const last = cleaned.lastIndexOf('}');
 
-  try {
-    return JSON.parse(cleaned);
-  } catch {
-    const first = cleaned.indexOf('{');
-    const last = cleaned.lastIndexOf('}');
-    if (first >= 0 && last > first) {
-      return JSON.parse(cleaned.slice(first, last + 1));
-    }
-    throw new Error('Google AI did not return valid JSON. Please try again with a clearer seed request.');
+  if (first >= 0 && last > first) {
+    return cleaned.slice(first, last + 1);
   }
+
+  return cleaned;
+}
+
+function removeTrailingCommas(jsonText: string) {
+  let output = '';
+  let inString = false;
+  let escaped = false;
+
+  for (let i = 0; i < jsonText.length; i += 1) {
+    const char = jsonText[i];
+
+    if (escaped) {
+      output += char;
+      escaped = false;
+      continue;
+    }
+
+    if (char === '\\' && inString) {
+      output += char;
+      escaped = true;
+      continue;
+    }
+
+    if (char === '"') {
+      inString = !inString;
+      output += char;
+      continue;
+    }
+
+    if (!inString && char === ',') {
+      let j = i + 1;
+      while (j < jsonText.length && /\s/.test(jsonText[j])) j += 1;
+      if (jsonText[j] === '}' || jsonText[j] === ']') {
+        continue;
+      }
+    }
+
+    output += char;
+  }
+
+  return output;
+}
+
+function repairLikelyJson(text: string) {
+  let repaired = sliceJsonObject(text)
+    .replace(/^\uFEFF/, '')
+    .replace(/[“”]/g, '"')
+    .replace(/[‘’]/g, "'")
+    .replace(/\bundefined\b/g, 'null')
+    .replace(/\bNaN\b/g, 'null');
+
+  repaired = removeTrailingCommas(repaired);
+
+  // Repair rare LLM output like: { query: "..." } -> { "query": "..." }
+  repaired = repaired.replace(/([{,]\s*)([A-Za-z_$][A-Za-z0-9_$-]*)(\s*:)/g, '$1"$2"$3');
+
+  return removeTrailingCommas(repaired);
+}
+
+function extractJson(text: string) {
+  const candidates = [sliceJsonObject(text), repairLikelyJson(text)];
+  const errors: string[] = [];
+
+  for (const candidate of candidates) {
+    try {
+      return JSON.parse(candidate);
+    } catch (error) {
+      errors.push(error instanceof Error ? error.message : String(error));
+    }
+  }
+
+  throw new Error(
+    `AI returned malformed JSON and automatic repair failed. Please try again. Parse errors: ${errors.slice(-2).join(' | ')}`
+  );
 }
 
 function hostFromUrl(url?: string) {
@@ -706,67 +777,70 @@ async function searchSeeds(apiKeys: string[], prompt: string) {
 
 export async function POST(request: NextRequest) {
   try {
-    const apiKeys = getApiKeys();
-    if (!apiKeys.length) {
-      return NextResponse.json(
-        {
-          error: 'Missing Google AI API key. Add GOOGLE_AI_API_KEY or GOOGLE_AI_API_KEYS in Vercel Environment Variables or .env.local for local testing.'
-        },
-        { status: 500 }
-      );
-    }
-
     const body = await request.json().catch(() => ({}));
     const query = String(body.query || '').trim();
     const edition = String(body.edition || 'Any').trim();
     const version = String(body.version || 'Latest stable').trim();
-    const count = Math.min(Math.max(Number(body.count) || 5, 1), 8);
-    const candidateCount = getCandidateCount(count);
+    const providerMode = String(body.providerMode || body.mode || 'gemini').toLowerCase() === 'groq' ? 'groq' : 'gemini';
+    const defaultCount = providerMode === 'groq' ? 10 : 5;
+    const maxCount = providerMode === 'groq' ? 15 : 5;
+    const count = Math.min(Math.max(Number(body.count) || defaultCount, 1), maxCount);
+    const candidateCount = providerMode === 'gemini' ? 5 : getCandidateCount(count);
 
     if (query.length < 8) {
       return NextResponse.json({ error: 'Please describe the seed you want in more detail.' }, { status: 400 });
     }
 
-    const cacheKey = makeCacheKey(query, edition, version, count);
+    const cacheKey = makeCacheKey(query, edition, version, count, providerMode);
     const cachedPayload = getCachedPayload(cacheKey);
     if (cachedPayload) {
       return NextResponse.json({ ...(cachedPayload as Record<string, unknown>), cached: true });
     }
 
-    const prompt = buildPrompt(query, edition, version, candidateCount);
     let text = '';
     let rawGroundingSources: Source[] = [];
-    let provider = 'google-grounding';
+    let provider = '';
 
-    try {
+    if (providerMode === 'gemini') {
+      const apiKeys = getApiKeys();
+      if (!apiKeys.length) {
+        return NextResponse.json(
+          {
+            error: 'Gemini mode needs GOOGLE_AI_API_KEY or GOOGLE_AI_API_KEYS in Vercel Environment Variables.'
+          },
+          { status: 500 }
+        );
+      }
+
+      const prompt = buildPrompt(query, edition, version, candidateCount);
       const googleResult = await searchSeeds(apiKeys, prompt);
       text = googleResult.text;
       rawGroundingSources = groundingSources(googleResult.data);
-    } catch (googleError) {
+      provider = 'gemini-google-search';
+    } else {
       const serperApiKey = getSerperApiKey();
       const groqKeys = getGroqApiKeys();
 
       if (!serperApiKey || !groqKeys.length) {
-        throw new Error(
-          `${googleError instanceof Error ? googleError.message : String(googleError)} ` +
-            `Groq fallback needs both SERPER_API_KEY for web search and GROQ_API_KEY / GROQ_API_KEY_2 for JSON formatting. Groq or local LLM alone cannot search the live web.`
+        return NextResponse.json(
+          {
+            error:
+              'Groq + Serper mode needs SERPER_API_KEY plus GROQ_API_KEY / GROQ_API_KEY_2 in Vercel Environment Variables. Groq alone cannot search the live web.'
+          },
+          { status: 500 }
         );
-      }
-
-      if (!isQuotaLikeError(googleError)) {
-        // Still try the fallback once; many model/tool errors can be recovered with Serper + Groq.
       }
 
       const serperSources = await searchWithSerper(serperApiKey, query, edition, version, candidateCount);
       if (!serperSources.length) {
-        throw new Error('Google AI failed and Serper returned no web results for this seed request.');
+        throw new Error('Serper returned no web results for this seed request. Try a broader prompt.');
       }
 
       const groqPrompt = buildSearchResultPrompt(query, edition, version, candidateCount, serperSources);
       const groqResult = await searchSeedsWithGroq(groqKeys, groqPrompt);
       text = groqResult.text;
       rawGroundingSources = serperSources;
-      provider = 'serper-groq';
+      provider = 'groq-serper';
     }
 
     const parsed = extractJson(text);
@@ -791,6 +865,8 @@ export async function POST(request: NextRequest) {
       rawGroundingSources,
       seeds,
       provider,
+      providerMode,
+      requestedResults: count,
       rejectedResults: rejected.slice(0, 5),
       cached: false
     };

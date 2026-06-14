@@ -101,3 +101,19 @@ Without `SERPER_API_KEY`, Groq fallback is not used for real seed search because
 ## Local LLM note
 
 A local LLM cannot run inside a normal Vercel serverless project. You can run Ollama on your own PC/VPS and expose a secure API endpoint, but that requires the machine to stay online and it still needs a search API for live web results.
+
+## Provider modes
+
+The website has two user-selectable modes:
+
+1. **Gemini Google Search**
+   - Uses Google AI Search grounding only.
+   - Does not use Serper.
+   - Capped at 5 verified seeds.
+
+2. **Groq + Serper Search**
+   - Uses Serper for web search.
+   - Uses Groq for JSON formatting.
+   - Lets users request 10 or 15 verified seeds.
+
+Both modes still filter out missing seeds, unknown edition/version, and dead source URLs.

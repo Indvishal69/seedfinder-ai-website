@@ -37,6 +37,10 @@ type ApiResult = {
   seeds: SeedResult[];
   websitesUsed?: Source[];
   rawGroundingSources?: Source[];
+  provider?: string;
+  providerMode?: 'gemini' | 'groq';
+  cached?: boolean;
+  requestedResults?: number;
 };
 
 const examples = [
@@ -62,6 +66,7 @@ export default function Home() {
   const [edition, setEdition] = useState('Any');
   const [version, setVersion] = useState('Latest stable');
   const [count, setCount] = useState('5');
+  const [providerMode, setProviderMode] = useState<'gemini' | 'groq'>('gemini');
   const [result, setResult] = useState<ApiResult | null>(null);
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
@@ -71,6 +76,15 @@ export default function Home() {
     const fromSeeds = result?.seeds?.flatMap((seed) => seed.sources || []) || [];
     return normalizeSources([...(result?.websitesUsed || []), ...fromSeeds, ...(result?.rawGroundingSources || [])]);
   }, [result]);
+
+  const resultOptions = providerMode === 'gemini' ? ['5'] : ['10', '15'];
+
+  function changeProviderMode(mode: 'gemini' | 'groq') {
+    setProviderMode(mode);
+    setCount(mode === 'gemini' ? '5' : '10');
+    setResult(null);
+    setError('');
+  }
 
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
@@ -87,7 +101,7 @@ export default function Home() {
       const response = await fetch('/api/find-seeds', {
         method: 'POST',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ query, edition, version, count: Number(count) })
+        body: JSON.stringify({ query, edition, version, count: Number(count), providerMode })
       });
 
       const data = await response.json();
@@ -139,8 +153,8 @@ export default function Home() {
               AI Minecraft <span>Seed Finder</span>
             </h1>
             <p>
-              Describe the Minecraft world you want. The server asks Google AI to search the web,
-              find real published seeds, list the source websites, and show what is located where.
+              Describe the Minecraft world you want. Choose Gemini Google Search mode or Groq + Serper mode. The server finds real published seeds,
+              lists source websites, and shows what is located where.
             </p>
           </div>
 
@@ -192,13 +206,34 @@ export default function Home() {
             </div>
 
             <div className="field">
+              <label htmlFor="providerMode">Mode</label>
+              <select
+                id="providerMode"
+                value={providerMode}
+                onChange={(e) => changeProviderMode(e.target.value === 'groq' ? 'groq' : 'gemini')}
+              >
+                <option value="gemini">Gemini Google Search</option>
+                <option value="groq">Groq + Serper Search</option>
+              </select>
+              <small>
+                {providerMode === 'gemini'
+                  ? 'Uses Google Search grounding only. Serper is not used.'
+                  : 'Uses Serper for web search and Groq for JSON results.'}
+              </small>
+            </div>
+
+            <div className="field">
               <label htmlFor="count">Results</label>
               <select id="count" value={count} onChange={(e) => setCount(e.target.value)}>
-                <option>3</option>
-                <option>5</option>
-                <option>8</option>
+                {resultOptions.map((option) => (
+                  <option key={option} value={option}>{option}</option>
+                ))}
               </select>
-              <small>More results may take longer.</small>
+              <small>
+                {providerMode === 'gemini'
+                  ? 'Gemini mode is capped at 5 verified seeds.'
+                  : 'Groq mode can request 10 or 15 verified seeds.'}
+              </small>
             </div>
           </div>
 
@@ -214,7 +249,7 @@ export default function Home() {
             >
               Try example
             </button>
-            <span className="helper-text">Search uses your private server API key, not the browser.</span>
+            <span className="helper-text">Current mode: {providerMode === 'gemini' ? 'Gemini Google Search, max 5 seeds' : 'Groq + Serper, 10/15 seeds'}.</span>
           </div>
         </form>
 
@@ -229,7 +264,7 @@ export default function Home() {
             <li>Ask for biome style: cherry grove, snow, desert, island, mountains.</li>
           </ul>
           <div className="status-strip">
-            The app requests source links and coordinates for every seed. Always verify in-game because Minecraft updates can change generation.
+            Gemini mode uses Google Search only. Groq mode uses Serper search. Every result is filtered for exact seed, edition, version, and working source URL.
           </div>
         </aside>
       </section>
@@ -250,6 +285,7 @@ export default function Home() {
                 <h2>Found seeds</h2>
                 <div className="query-pill" title={result.query}>Query: {result.query}</div>
               </div>
+              <div className="query-pill">Mode: {result.providerMode === 'groq' ? 'Groq + Serper' : 'Gemini Google Search'}{result.cached ? ' • cached' : ''}</div>
               <div className="query-pill">Generated: {new Date(result.generatedAt).toLocaleString()}</div>
             </div>
 
