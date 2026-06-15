@@ -262,6 +262,7 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [copiedSeed, setCopiedSeed] = useState('');
   const [activeSeedTab, setActiveSeedTab] = useState<'preloaded' | 'saved'>('saved');
+  const [activePageTab, setActivePageTab] = useState<'finder' | 'other'>('finder');
   const resultsRef = useRef<HTMLElement | null>(null);
 
   const allSources = useMemo(() => {
@@ -290,6 +291,21 @@ export default function Home() {
       })
       .catch(() => setGlobalLibraryReady(false));
   }, []);
+
+  function openFinder() {
+    setActivePageTab('finder');
+    window.setTimeout(() => document.getElementById('finder')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  }
+
+  function openOtherSeeds() {
+    setActivePageTab('other');
+    window.setTimeout(() => document.getElementById('seed-library')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  }
+
+  function openResults() {
+    setActivePageTab('finder');
+    scrollToResults();
+  }
 
   function loadSavedSearch(searchKey: string) {
     try {
@@ -335,6 +351,8 @@ export default function Home() {
       setError('Please describe the seed you want in a little more detail.');
       return;
     }
+
+    setActivePageTab('finder');
 
     const searchKey = makeLocalSearchKey(query, edition, version, count);
     const savedSearch = loadSavedSearch(searchKey);
@@ -412,9 +430,9 @@ export default function Home() {
           <span>SeedFinder AI</span>
         </a>
         <div className="nav-links">
-          <a href="#finder">Find Seeds</a>
-          <a href="#results">Results</a>
-          <a href="#seed-library">Other Seeds</a>
+          <button className={activePageTab === 'finder' ? 'active' : ''} type="button" onClick={openFinder}>AI Finder</button>
+          <button type="button" onClick={openResults}>Results</button>
+          <button className={activePageTab === 'other' ? 'active' : ''} type="button" onClick={openOtherSeeds}>Other Seeds</button>
           <a href="/seed-guides">Guides</a>
         </div>
       </nav>
@@ -431,17 +449,21 @@ export default function Home() {
               AI Minecraft <span>Seed Finder</span>
             </h1>
             <p>
-              Describe the Minecraft world you want. The server uses Gemini with Google Search to find real published seeds, list source websites,
-              and show what is located where. AI results are saved in your browser seed library.
+              Find real Minecraft seeds with source links, Java/Bedrock details, version info, and coordinates.
+              New verified results are saved under Other Seeds so players can reuse them easily.
             </p>
           </div>
 
-          <div className="pixel-card" aria-hidden="true">
-            <div className="pixel-grid">
-              {['grass','grass','sand','water','water','deep','grass','stone','sand','sand','water','deep','grass','grass','stone','lava','stone','deep','deep','grass','stone','stone','grass','grass','water','water','sand','grass','grass','stone','deep','water','water','sand','grass','grass'].map((block, index) => (
-                <div className={`block ${block}`} key={`${block}-${index}`} />
-              ))}
+          <div className="process-card" aria-label="How the seed finder works">
+            <div className="process-card-head">
+              <span>Live workflow</span>
+              <strong>Verified seed search</strong>
             </div>
+            <ol className="process-list">
+              <li><span>1</span><div><strong>Describe</strong><p>Write the world style, edition, version, and structures.</p></div></li>
+              <li><span>2</span><div><strong>Search sources</strong><p>Gemini checks public web results with Google Search grounding.</p></div></li>
+              <li><span>3</span><div><strong>Save & reuse</strong><p>Verified seeds are stored in Other Seeds for quick access.</p></div></li>
+            </ol>
           </div>
         </div>
       </section>
@@ -449,10 +471,12 @@ export default function Home() {
       <section className="pro-stats" aria-label="Website features">
         <div><strong>Google Search</strong><span>Gemini grounded sources</span></div>
         <div><strong>Verified Links</strong><span>404/dead sources filtered</span></div>
-        <div><strong>Saved Seeds</strong><span>Global + browser library</span></div>
+        <div><strong>Other Seeds</strong><span>Saved finds for everyone</span></div>
         <div><strong>Fast Reuse</strong><span>Same searches use cache</span></div>
       </section>
 
+      {activePageTab === 'finder' && (
+        <>
       <div className="responsive-ad-stack top-ad">
         <AdsterraBannerAd size="728x90" label="Top advertisement" className="desktop-ad" />
         <AdsterraBannerAd size="320x50" label="Top advertisement" className="mobile-ad" />
@@ -460,12 +484,12 @@ export default function Home() {
 
       <section className="search-panel" id="finder">
         <form className="form-card" onSubmit={submit}>
-          <label htmlFor="query">What kind of seed do you want?</label>
+          <label htmlFor="query">Step 1 — Describe your Minecraft seed</label>
           <textarea
             id="query"
             value={query}
             onChange={(e) => setQuery(e.target.value)}
-            placeholder="Example: Java 1.21 seed with village at spawn, trial chamber, ancient city, and cherry grove nearby..."
+            placeholder="Example: Java 1.21 village near spawn with trial chamber, cherry grove, and coordinates..."
           />
 
           <div className="controls">
@@ -513,19 +537,23 @@ export default function Home() {
             >
               Try example
             </button>
-            <span className="helper-text">Gemini Google Search only. Same searches return from your saved library/cache.</span>
+            <span className="helper-text">Tip: mention Java/Bedrock, version, structures, and biome. We save verified finds in Other Seeds.</span>
           </div>
         </form>
+
+        <div className="mobile-search-ad">
+          <AdsterraBannerAd size="320x50" label="Mobile advertisement" />
+        </div>
 
         <aside className="tips-card">
           <AdsterraBannerAd size="300x250" label="Sidebar advertisement" className="sidebar-ad" />
 
-          <h2>Best prompts</h2>
+          <h2>How to get good results</h2>
           <ul>
-            <li>Mention edition: Java or Bedrock.</li>
-            <li>Add version: 1.21, 1.20, 1.19, etc.</li>
-            <li>Ask for structures: village, ancient city, mansion, monument, trial chamber.</li>
-            <li>Ask for biome style: cherry grove, snow, desert, island, mountains.</li>
+            <li>Choose Java, Bedrock, or Any.</li>
+            <li>Write the Minecraft version if you know it.</li>
+            <li>Add must-have places like village, mansion, trial chamber, or island.</li>
+            <li>Open Other Seeds later to reuse verified seeds without another search.</li>
           </ul>
           <div className="status-strip">
             This app uses Gemini Google Search only. Generated seeds are saved in your browser library and reused when you ask the same search again.
@@ -657,6 +685,10 @@ export default function Home() {
         )}
       </section>
 
+        </>
+      )}
+
+      {activePageTab === 'other' && (
       <section className="seed-library-section seed-tabs-section" id="seed-library">
         <div className="seo-section-head">
           <span className="badge">💾 Seed library</span>
@@ -782,6 +814,8 @@ export default function Home() {
         )}
       </section>
 
+      )}
+
       <section className="seo-section">
         <div className="seo-section-head">
           <span className="badge">📈 Minecraft seed guides</span>
@@ -806,7 +840,7 @@ export default function Home() {
       <footer className="footer">
         <div>Built for Vercel. Keep your Google AI key in environment variables only.</div>
         <nav className="footer-links" aria-label="Footer links">
-          <a href="#seed-library">Other Seeds</a>
+          <a href="#seed-library" onClick={(e) => { e.preventDefault(); openOtherSeeds(); }}>Other Seeds</a>
           <a href="/seed-guides">Seed Guides</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>

@@ -171,3 +171,12 @@ The homepage now uses clearer wording:
 - **Built-in Seeds** tab: starter picks already included with the site.
 
 The Other Seeds tab includes ads and full seed details. The finder auto-scrolls to the results once seeds are generated.
+
+## Clean UI redesign
+
+The homepage has been redesigned around two simple areas:
+
+- **AI Finder**: search form and generated results.
+- **Other Seeds**: a separate tab for seeds discovered from searches plus built-in picks.
+
+Mobile ads are adjusted so phone users see compact 320x50 placements and the large sidebar ad is hidden on small screens. The Other Seeds tab includes in-feed ads and full seed details.
