@@ -184,8 +184,8 @@ function shortKeyLabel(index: number) {
 }
 
 function getCandidateCount(requestedCount: number) {
-  // Ask Gemini for more candidates because strict verification removes weak/dead-source results.
-  return Math.min(Math.max(requestedCount * 2, requestedCount, 8), 30);
+  // Keep requests fast and quota-friendly; strict filtering may remove a few weak results.
+  return Math.min(Math.max(requestedCount + 3, requestedCount, 6), 12);
 }
 
 function makeCacheKey(query: string, edition: string, version: string, count: number, providerMode: string) {
@@ -1064,8 +1064,8 @@ async function searchSeedsWithGroq(groqKeys: string[], prompt: string) {
 
 async function searchSeeds(apiKeys: string[], prompt: string) {
   const requestedModel = (process.env.GEMINI_MODEL || DEFAULT_MODEL).trim();
-  const fallbackModels = [requestedModel, DEFAULT_MODEL, 'gemini-2.5-flash', 'gemini-3.5-flash', 'gemini-2.0-flash'];
-  const models = Array.from(new Set(fallbackModels.filter(Boolean)));
+  // Fast mode: do not burn quota by trying many old/expensive models. Try configured model + lite fallback only.
+  const models = Array.from(new Set([requestedModel, DEFAULT_MODEL].filter(Boolean)));
   const errors: string[] = [];
 
   for (let keyIndex = 0; keyIndex < apiKeys.length; keyIndex += 1) {
@@ -1075,14 +1075,16 @@ async function searchSeeds(apiKeys: string[], prompt: string) {
       try {
         return await callGemini(apiKey, model, prompt);
       } catch (error) {
-        errors.push(`key ${keyIndex + 1}/${model}: ${error instanceof Error ? error.message : String(error)}`);
+        errors.push(`${shortKeyLabel(keyIndex)}/${model}: ${error instanceof Error ? error.message : String(error)}`);
       }
     }
   }
 
+  const quotaError = errors.some((error) => isQuotaLikeError(error));
   throw new Error(
-    `All configured Google AI keys failed or reached quota. Use legitimate Gemini API keys from your own Google AI Studio projects, add billing for production traffic, or wait for quota reset. ` +
-      `Recent errors: ${errors.slice(-5).join(' | ')}`
+    quotaError
+      ? 'Google AI quota is busy or finished right now. Please try again in 30 seconds, lower the result count, or open Other Seeds.'
+      : `Google AI search failed. Recent errors: ${errors.slice(-2).join(' | ')}`
   );
 }
 
@@ -1122,15 +1124,20 @@ export async function POST(request: NextRequest) {
       return NextResponse.json({ ...globalCachedPayload, cached: true, provider: 'global-seed-database' });
     }
 
-    const researchPrompt = buildResearchPrompt(query, edition, version, candidateCount);
-    const googleResult = await searchSeeds(apiKeys, researchPrompt);
-    const researchText = googleResult.text;
+    const prompt = buildPrompt(query, edition, version, candidateCount);
+    const googleResult = await searchSeeds(apiKeys, prompt);
+    const text = googleResult.text;
     const rawGroundingSources = groundingSources(googleResult.data);
     const provider = 'gemini-google-search';
     const providerMode = 'gemini';
 
-    const jsonPrompt = buildJsonFromResearchPrompt(query, edition, version, candidateCount, researchText, rawGroundingSources);
-    const parsed = await formatResearchJsonWithGemini(apiKeys, jsonPrompt);
+    let parsed: any;
+    try {
+      parsed = extractJson(text);
+    } catch {
+      // Only spend a second API call when Gemini's search response is not valid JSON.
+      parsed = await repairJsonWithGemini(apiKeys, text);
+    }
 
     const { validSeeds: seeds, rejected } = await sanitizeSeedResults(
       Array.isArray(parsed.seeds) ? parsed.seeds : [],
@@ -1172,11 +1179,16 @@ export async function POST(request: NextRequest) {
 
     return NextResponse.json(payload);
   } catch (error) {
+    const message = error instanceof Error ? error.message : 'Unknown server error while searching seeds.';
+    const quota = isQuotaLikeError(message) || message.toLowerCase().includes('quota is busy');
+
     return NextResponse.json(
       {
-        error: error instanceof Error ? error.message : 'Unknown server error while searching seeds.'
+        error: quota
+          ? 'Google AI quota is busy right now. Try again in 30 seconds, choose fewer results, or open Other Seeds for saved seeds.'
+          : message
       },
-      { status: 500 }
+      { status: quota ? 429 : 500 }
     );
   }
 }

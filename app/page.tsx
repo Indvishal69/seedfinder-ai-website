@@ -331,9 +331,38 @@ export default function Home() {
     }
   }
 
-  function findExactLibrarySeed() {
-    const lowerQuery = query.toLowerCase();
-    return librarySeeds.filter((seed) => seed.seed && lowerQuery.includes(String(seed.seed).toLowerCase())).slice(0, Number(count) || 5);
+  function findLibraryMatches(minMatches = 1) {
+    const terms = query
+      .toLowerCase()
+      .replace(/[^a-z0-9\s.-]/g, ' ')
+      .split(/\s+/)
+      .filter((term) => term.length >= 3);
+
+    const scored = librarySeeds
+      .map((seed) => {
+        const haystack = [
+          seed.seed,
+          seed.title,
+          seed.edition,
+          seed.version,
+          seed.spawn,
+          seed.whyMatches,
+          seed.notes,
+          ...(seed.tags || []),
+          ...(seed.features || []).flatMap((feature) => [feature.name, feature.type, feature.description, feature.coordinates])
+        ]
+          .join(' ')
+          .toLowerCase();
+
+        const exactSeedMatch = seed.seed && query.toLowerCase().includes(String(seed.seed).toLowerCase());
+        const score = (exactSeedMatch ? 100 : 0) + terms.reduce((total, term) => total + (haystack.includes(term) ? 1 : 0), 0);
+        return { seed, score };
+      })
+      .filter((item) => item.score >= minMatches)
+      .sort((a, b) => b.score - a.score)
+      .map((item) => item.seed);
+
+    return scored.slice(0, Number(count) || 5);
   }
 
   function scrollToResults() {
@@ -362,7 +391,7 @@ export default function Home() {
       return;
     }
 
-    const exactLibraryMatches = findExactLibrarySeed();
+    const exactLibraryMatches = findLibraryMatches(2);
     if (exactLibraryMatches.length) {
       setResult({
         query,
@@ -396,7 +425,25 @@ export default function Home() {
       saveAiResult(searchKey, data);
       scrollToResults();
     } catch (err) {
-      setError(err instanceof Error ? err.message : 'Something went wrong while searching.');
+      const fallbackSeeds = findLibraryMatches(1);
+      const message = err instanceof Error ? err.message : 'Something went wrong while searching.';
+
+      if (fallbackSeeds.length) {
+        setResult({
+          query,
+          generatedAt: new Date().toISOString(),
+          disclaimer: 'Google AI is busy, so these matching seeds are shown from Other Seeds. Try AI search again in a few seconds.',
+          seeds: fallbackSeeds,
+          websitesUsed: normalizeSources(fallbackSeeds.flatMap((seed) => seed.sources || [])),
+          rawGroundingSources: [],
+          provider: 'other-seeds-fallback',
+          cached: true
+        });
+        setError('');
+        scrollToResults();
+      } else {
+        setError(message.includes('quota') || message.includes('busy') ? 'Google AI is busy right now. Try again in 30 seconds or open Other Seeds.' : message);
+      }
     } finally {
       setLoading(false);
     }
@@ -537,7 +584,7 @@ export default function Home() {
             >
               Try example
             </button>
-            <span className="helper-text">Tip: mention Java/Bedrock, version, structures, and biome. We save verified finds in Other Seeds.</span>
+            <span className="helper-text">For fastest results choose 5 seeds. If AI is busy, matching Other Seeds will appear instantly.</span>
           </div>
         </form>
 

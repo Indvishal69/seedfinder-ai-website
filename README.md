@@ -180,3 +180,18 @@ The homepage has been redesigned around two simple areas:
 - **Other Seeds**: a separate tab for seeds discovered from searches plus built-in picks.
 
 Mobile ads are adjusted so phone users see compact 320x50 placements and the large sidebar ad is hidden on small screens. The Other Seeds tab includes in-feed ads and full seed details.
+
+## Speed and quota improvements
+
+The API now uses a fast Gemini model strategy:
+
+- It tries only the configured Gemini model plus the Flash-Lite fallback instead of burning quota on many old models.
+- It no longer tries `gemini-2.0-flash`, which often has free-tier limit 0.
+- It requests fewer extra candidates to make responses faster.
+- If Google AI quota is busy, the UI shows matching seeds from Other Seeds instead of a huge technical error.
+
+Recommended Vercel setting:
+
+```env
+GEMINI_MODEL=gemini-2.5-flash-lite
+```
