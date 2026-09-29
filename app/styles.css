@@ -736,6 +736,209 @@ select:focus {
   margin-top: 32px;
 }
 
+.hero-cta-post {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #15803d;
+  color: #ffffff !important;
+  border: 4px solid var(--mc-btn-border-black);
+  box-shadow: 
+    inset 4px 4px 0px 0px #4ade80,
+    inset -4px -4px 0px 0px #14532d;
+  padding: 12px 20px;
+  font-size: 1.1rem;
+  font-family: var(--font-pixel);
+  text-decoration: none;
+  cursor: pointer;
+  position: relative;
+  transition: transform 0.15s, background-color 0.15s;
+}
+
+.hero-cta-post:hover {
+  background: #16a34a;
+  color: #ffffff !important;
+  transform: translateY(-2px);
+}
+
+.hero-cta-post:active {
+  box-shadow: 
+    inset 4px 4px 0px 0px #14532d,
+    inset -4px -4px 0px 0px #4ade80;
+  padding: 14px 18px 10px 22px;
+}
+
+.nav-create-post-btn {
+  display: inline-flex;
+  align-items: center;
+  gap: 6px;
+  background: #16a34a !important;
+  color: #ffffff !important;
+  border: 2px solid #14532d !important;
+  box-shadow: inset 1px 1px 0px rgba(255,255,255,0.4), inset -1px -1px 0px rgba(0,0,0,0.4) !important;
+  padding: 6px 12px !important;
+  border-radius: 3px;
+  font-size: 0.95rem !important;
+  font-family: var(--font-pixel) !important;
+  text-decoration: none !important;
+  cursor: pointer;
+  transition: all 0.15s ease;
+}
+
+.nav-create-post-btn:hover {
+  background: #22c55e !important;
+  color: #ffffff !important;
+  transform: translateY(-1px);
+}
+
+/* ===== Create Your First Post Community Card ===== */
+.community-create-banner {
+  background: #23272e;
+  border: 4px solid var(--mc-btn-border-black);
+  box-shadow: 
+    inset 4px 4px 0px 0px #38bdf8,
+    inset -4px -4px 0px 0px #0f172a,
+    0 10px 25px rgba(0,0,0,0.5);
+  padding: clamp(20px, 4vw, 32px);
+  margin: 24px 0 32px 0;
+  position: relative;
+  overflow: hidden;
+}
+
+.community-banner-content {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  gap: 24px;
+  flex-wrap: wrap;
+}
+
+.community-banner-left {
+  flex: 1 1 450px;
+}
+
+.community-badge-tag {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  background: #1e1e1e;
+  border: 2px solid #38bdf8;
+  color: #38bdf8;
+  font-family: var(--font-pixel);
+  font-size: 0.85rem;
+  padding: 4px 10px;
+  margin-bottom: 12px;
+}
+
+.community-badge-tag .live-dot {
+  width: 8px;
+  height: 8px;
+  background: #22c55e;
+  border-radius: 50%;
+  box-shadow: 0 0 8px #22c55e;
+}
+
+.community-banner-left h2 {
+  font-size: clamp(1.4rem, 3.2vw, 2rem);
+  margin: 0 0 10px 0;
+  color: #ffffff;
+  line-height: 1.25;
+}
+
+.community-banner-left h2 span {
+  color: var(--mc-text-yellow);
+}
+
+.community-banner-left p {
+  color: #cbd5e1;
+  font-family: var(--font-sans);
+  font-size: 1rem;
+  line-height: 1.5;
+  margin: 0 0 16px 0;
+}
+
+.community-perks {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.community-perks span {
+  background: #111827;
+  border: 1px solid #475569;
+  color: #94a3b8;
+  padding: 4px 10px;
+  font-family: var(--font-sans);
+  font-size: 0.85rem;
+  font-weight: 500;
+  border-radius: 2px;
+}
+
+.community-banner-actions {
+  display: flex;
+  flex-direction: column;
+  gap: 12px;
+  flex-shrink: 0;
+  min-width: 240px;
+}
+
+.btn-create-post-large {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 10px;
+  background: #16a34a;
+  color: #ffffff !important;
+  border: 4px solid var(--mc-btn-border-black);
+  box-shadow: 
+    inset 4px 4px 0px 0px #4ade80,
+    inset -4px -4px 0px 0px #14532d;
+  padding: 14px 24px;
+  font-family: var(--font-pixel);
+  font-size: 1.05rem;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.btn-create-post-large:hover {
+  background: #22c55e;
+  transform: translateY(-2px);
+  color: #ffffff !important;
+}
+
+.btn-create-post-large:active {
+  box-shadow: 
+    inset 4px 4px 0px 0px #14532d,
+    inset -4px -4px 0px 0px #4ade80;
+  padding: 16px 22px 12px 26px;
+}
+
+.btn-browse-feed-large {
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 8px;
+  background: #334155;
+  color: #f1f5f9 !important;
+  border: 3px solid #1e293b;
+  box-shadow: inset 2px 2px 0px 0px #64748b, inset -2px -2px 0px 0px #0f172a;
+  padding: 10px 18px;
+  font-family: var(--font-pixel);
+  font-size: 0.9rem;
+  cursor: pointer;
+  text-decoration: none;
+  text-align: center;
+  transition: all 0.15s ease;
+}
+
+.btn-browse-feed-large:hover {
+  background: #475569;
+  color: var(--mc-text-yellow) !important;
+}
+
 /* Process Card (Crafting table style) */
 .process-card {
   background: #c6c6c6;
@@ -1476,4 +1679,25 @@ select:focus {
     padding: 12px;
     font-size: 0.85rem;
   }
+
+  .community-create-banner {
+    padding: 16px;
+    margin: 16px 0 24px 0;
+  }
+
+  .community-banner-actions {
+    width: 100%;
+    min-width: 0;
+  }
+
+  .btn-create-post-large,
+  .btn-browse-feed-large {
+    width: 100%;
+  }
+
+  .hero-cta-post {
+    width: 100%;
+    text-align: center;
+  }
 }
+

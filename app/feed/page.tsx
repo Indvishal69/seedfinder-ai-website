@@ -19,9 +19,11 @@ import {
 import { uploadImageToImgBB } from '../lib/imgbb';
 import { POPULAR_TAGS, ALL_MINECRAFT_TAGS, searchTags } from '../lib/tags';
 import Link from 'next/link';
+import AuthModal from '../components/AuthModal';
 
 export default function FeedPage() {
   const { user, profile } = useAuth();
+  const [showAuthModal, setShowAuthModal] = useState(false);
   
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
@@ -68,10 +70,18 @@ export default function FeedPage() {
         setPostTags(['MinecraftHub', 'SeedShowcase', 'MinecraftPost']);
         setIsModalOpen(true);
       }
+      const createParam = params.get('create') || params.get('newPost') || params.get('firstPost');
+      if (createParam) {
+        if (user) {
+          setIsModalOpen(true);
+        } else {
+          setShowAuthModal(true);
+        }
+      }
       const tagParam = params.get('tag');
       if (tagParam) setSelectedTag(tagParam);
     }
-  }, []);
+  }, [user]);
 
   useEffect(() => {
     if (user) {
@@ -295,11 +305,18 @@ export default function FeedPage() {
           <h2 style={{ margin: 0, color: 'var(--mc-text-yellow)', display: 'flex', alignItems: 'center', gap: '8px' }}>
             <span>⛏️</span> Social Feed
           </h2>
-          {user && (
-            <button className="primary-btn" onClick={() => setIsModalOpen(true)}>
-              + New Post
-            </button>
-          )}
+          <button 
+            className="primary-btn" 
+            onClick={() => {
+              if (user) {
+                setIsModalOpen(true);
+              } else {
+                setShowAuthModal(true);
+              }
+            }}
+          >
+            + New Post
+          </button>
         </div>
         
         {user && (
@@ -1057,6 +1074,9 @@ export default function FeedPage() {
           </div>
         </div>
       )}
+
+      {/* Auth Modal for Login to Post */}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
     </div>
   );
 }

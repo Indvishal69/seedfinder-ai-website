@@ -590,6 +590,20 @@ function HomeContent() {
           <a href="/feed">
             <span className="nav-icon">🌍</span> Feed
           </a>
+          <button 
+            type="button" 
+            className="nav-create-post-btn"
+            onClick={() => {
+              if (!user) {
+                showToast('🔑 Please sign in to create your first post!');
+                setShowAuthModal(true);
+              } else {
+                window.location.href = '/feed?create=1';
+              }
+            }}
+          >
+            <span>➕</span> Create Post
+          </button>
           <button type="button" onClick={openResults}>
             <span className="nav-icon">📊</span> Results
           </button>
@@ -643,6 +657,20 @@ function HomeContent() {
               <button className="hero-cta" type="button" onClick={openFinder}>
                 Start Finding Seeds
               </button>
+              <button
+                className="hero-cta-post"
+                type="button"
+                onClick={() => {
+                  if (!user) {
+                    showToast('🔑 Please sign in to create your first post!');
+                    setShowAuthModal(true);
+                  } else {
+                    window.location.href = '/feed?create=1';
+                  }
+                }}
+              >
+                ✨ Create Your First Post
+              </button>
               {!user && (
                 <button className="hero-cta-secondary" type="button" onClick={() => setShowAuthModal(true)}>
                   Sign Up Free
@@ -671,6 +699,49 @@ function HomeContent() {
         <div><strong>✅ Verified</strong><span>404/dead sources filtered</span></div>
         <div><strong>🎯 Daily Picks</strong><span>Fresh seeds every day</span></div>
         <div><strong>❤️ Favorites</strong><span>Save with your account</span></div>
+      </section>
+
+      {/* Community "Create Your First Post" Showcase Banner */}
+      <section className="community-create-banner" aria-label="Create your first post">
+        <div className="community-banner-content">
+          <div className="community-banner-left">
+            <div className="community-badge-tag">
+              <span className="live-dot" /> 🎮 MINECRAFT COMMUNITY HUB
+            </div>
+            <h2>Share Your World — <span>Create Your First Post!</span></h2>
+            <p>
+              Found an incredible seed, discovered a rare structure, or built an epic SMP base?
+              Share your screenshots, coordinates, and adventure with fellow Minecrafters.
+              Get likes, comments, and followers!
+            </p>
+            <div className="community-perks">
+              <span>📸 Post Screenshots</span>
+              <span>🗺️ Attach Coordinates</span>
+              <span>🏷️ 100+ Minecraft Tags</span>
+              <span>💬 Live Comments</span>
+              <span>🔴 Follow Creators</span>
+            </div>
+          </div>
+          <div className="community-banner-actions">
+            <button
+              className="btn-create-post-large"
+              type="button"
+              onClick={() => {
+                if (!user) {
+                  showToast('🔑 Please sign in to create your first post!');
+                  setShowAuthModal(true);
+                } else {
+                  window.location.href = '/feed?create=1';
+                }
+              }}
+            >
+              ➕ CREATE YOUR FIRST POST
+            </button>
+            <a href="/feed" className="btn-browse-feed-large">
+              🌍 Browse Community Feed
+            </a>
+          </div>
+        </div>
       </section>
 
       {/* Daily Seeds Section */}
