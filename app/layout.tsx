@@ -1,31 +1,34 @@
 import type { Metadata } from 'next';
 import Script from 'next/script';
 import './styles.css';
+import { AuthProvider } from './components/AuthContext';
+import Navbar from './components/Navbar';
+import RateSiteWidget from './components/RateSiteWidget';
 
 const baseUrl = process.env.NEXT_PUBLIC_SITE_URL || 'https://seedfinder-ai-website.vercel.app';
 
 export const metadata: Metadata = {
   metadataBase: new URL(baseUrl),
   title: {
-    default: 'AI Minecraft Seed Finder',
-    template: '%s | AI Minecraft Seed Finder'
+    default: 'SeedFinder AI — Minecraft Seed Finder with AI',
+    template: '%s | SeedFinder AI'
   },
-  description: 'Find real Minecraft seeds with Google AI, source websites, edition/version details, and coordinates.',
-  keywords: ['Minecraft seed finder', 'Minecraft seeds', 'Java seeds', 'Bedrock seeds', 'Minecraft 1.21 seeds'],
+  description: 'Find real Minecraft seeds with AI. Google-powered search, verified sources, Java/Bedrock support, daily picks, favorites, and coordinates. Free and open.',
+  keywords: ['Minecraft seed finder', 'Minecraft seeds', 'Java seeds', 'Bedrock seeds', 'Minecraft 1.21 seeds', 'AI seed finder', 'daily minecraft seeds'],
   alternates: {
     canonical: '/'
   },
   openGraph: {
-    title: 'AI Minecraft Seed Finder',
-    description: 'Find real Minecraft seeds with Google AI and web sources.',
+    title: 'SeedFinder AI — Minecraft Seed Finder',
+    description: 'AI-powered Minecraft seed finder with verified sources, daily picks, favorites, and more.',
     url: baseUrl,
-    siteName: 'AI Minecraft Seed Finder',
+    siteName: 'SeedFinder AI',
     type: 'website'
   },
   twitter: {
-    card: 'summary',
-    title: 'AI Minecraft Seed Finder',
-    description: 'Find real Minecraft seeds with Google AI and web sources.'
+    card: 'summary_large_image',
+    title: 'SeedFinder AI — Minecraft Seed Finder',
+    description: 'AI-powered Minecraft seed finder with verified sources, daily picks, favorites, and more.'
   },
   verification: {
     google: process.env.NEXT_PUBLIC_GOOGLE_SITE_VERIFICATION
@@ -37,8 +40,17 @@ export default function RootLayout({ children }: { children: React.ReactNode }) 
 
   return (
     <html lang="en">
+      <head>
+        <link rel="preconnect" href="https://fonts.googleapis.com" />
+        <link rel="preconnect" href="https://fonts.gstatic.com" crossOrigin="anonymous" />
+        <link href="https://fonts.googleapis.com/css2?family=Silkscreen:wght@400;700&family=VT323&display=swap" rel="stylesheet" />
+      </head>
       <body>
-        {children}
+        <AuthProvider>
+          <Navbar />
+          {children}
+          <RateSiteWidget />
+        </AuthProvider>
         {adSenseClient ? (
           <Script
             id="adsense-script"

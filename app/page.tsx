@@ -2,6 +2,11 @@
 
 import { Fragment, FormEvent, useEffect, useMemo, useRef, useState } from 'react';
 import { AdsterraBannerAd, AdsterraNativeBannerAd, AdsterraSocialBar } from './components/AdsterraAds';
+import { AuthProvider, useAuth } from './components/AuthContext';
+import AuthModal from './components/AuthModal';
+import UserMenu from './components/UserMenu';
+import DailySeeds from './components/DailySeeds';
+import { saveUserFavorite, getUserFavorites, removeUserFavorite, saveSearchHistory } from './lib/firebase';
 
 type Feature = {
   name?: string;
@@ -29,6 +34,7 @@ type SeedResult = {
   features?: Feature[];
   sources?: Source[];
   notes?: string;
+  id?: string;
 };
 
 type ApiResult = {
@@ -48,7 +54,10 @@ const examples = [
   'Java 1.21 seed with a village near spawn, trial chamber nearby, and a beautiful mountain valley',
   'Bedrock seed for survival island with ocean monument, shipwreck, and village not too far away',
   'Java seed with ancient city under spawn and cherry grove near mountains',
-  'Speedrun style seed with ruined portal, village, and stronghold coordinates'
+  'Speedrun style seed with ruined portal, village, and stronghold coordinates',
+  'Minecraft 1.21 seed with cherry grove, village, and trial chamber all within 500 blocks',
+  'Best Java seed for building a medieval kingdom with nearby plains and river',
+  'Bedrock 1.21 seed with mushroom island near spawn',
 ];
 
 const SAVED_SEARCHES_KEY = 'seedfinder:saved-searches:v1';
@@ -249,7 +258,8 @@ function normalizeSources(sources?: Source[]) {
   });
 }
 
-export default function Home() {
+function HomeContent() {
+  const { user } = useAuth();
   const [query, setQuery] = useState(examples[0]);
   const [edition, setEdition] = useState('Any');
   const [version, setVersion] = useState('Latest stable');
@@ -262,7 +272,11 @@ export default function Home() {
   const [loading, setLoading] = useState(false);
   const [copiedSeed, setCopiedSeed] = useState('');
   const [activeSeedTab, setActiveSeedTab] = useState<'preloaded' | 'saved'>('saved');
-  const [activePageTab, setActivePageTab] = useState<'finder' | 'other'>('finder');
+  const [activePageTab, setActivePageTab] = useState<'finder' | 'daily' | 'favorites' | 'other'>('finder');
+  const [showAuthModal, setShowAuthModal] = useState(false);
+  const [favorites, setFavorites] = useState<SeedResult[]>([]);
+  const [toastMessage, setToastMessage] = useState('');
+  const [mobileMenuOpen, setMobileMenuOpen] = useState(false);
   const resultsRef = useRef<HTMLElement | null>(null);
 
   const allSources = useMemo(() => {
@@ -274,6 +288,11 @@ export default function Home() {
   const librarySeeds = useMemo(() => uniqueSeeds([...PRELOADED_SEEDS, ...globalSeeds, ...savedSeeds]), [globalSeeds, savedSeeds]);
   const aiSavedSeeds = useMemo(() => uniqueSeeds([...globalSeeds, ...savedSeeds]), [globalSeeds, savedSeeds]);
   const activeLibrarySeeds = activeSeedTab === 'preloaded' ? PRELOADED_SEEDS : aiSavedSeeds;
+
+  function showToast(message: string) {
+    setToastMessage(message);
+    setTimeout(() => setToastMessage(''), 2500);
+  }
 
   useEffect(() => {
     try {
@@ -292,18 +311,47 @@ export default function Home() {
       .catch(() => setGlobalLibraryReady(false));
   }, []);
 
+  // Load favorites when user logs in
+  useEffect(() => {
+    if (user) {
+      getUserFavorites(user.uid)
+        .then((favs) => setFavorites(favs as SeedResult[]))
+        .catch(() => setFavorites([]));
+    } else {
+      setFavorites([]);
+    }
+  }, [user]);
+
   function openFinder() {
     setActivePageTab('finder');
+    setMobileMenuOpen(false);
     window.setTimeout(() => document.getElementById('finder')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  }
+
+  function openDaily() {
+    setActivePageTab('daily');
+    setMobileMenuOpen(false);
+    window.setTimeout(() => document.getElementById('daily-section')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
+  }
+
+  function openFavorites() {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    setActivePageTab('favorites');
+    setMobileMenuOpen(false);
   }
 
   function openOtherSeeds() {
     setActivePageTab('other');
+    setMobileMenuOpen(false);
     window.setTimeout(() => document.getElementById('seed-library')?.scrollIntoView({ behavior: 'smooth', block: 'start' }), 60);
   }
 
   function openResults() {
     setActivePageTab('finder');
+    setMobileMenuOpen(false);
     scrollToResults();
   }
 
@@ -371,6 +419,33 @@ export default function Home() {
     }, 80);
   }
 
+  async function addToFavorites(seed: SeedResult) {
+    if (!user) {
+      setShowAuthModal(true);
+      return;
+    }
+    try {
+      await saveUserFavorite(user.uid, seed as Record<string, unknown>);
+      const updated = await getUserFavorites(user.uid);
+      setFavorites(updated as SeedResult[]);
+      showToast('❤️ Added to favorites!');
+    } catch {
+      showToast('Failed to save favorite');
+    }
+  }
+
+  async function removeFromFavorites(favoriteId: string) {
+    if (!user) return;
+    try {
+      await removeUserFavorite(user.uid, favoriteId);
+      const updated = await getUserFavorites(user.uid);
+      setFavorites(updated as SeedResult[]);
+      showToast('Removed from favorites');
+    } catch {
+      showToast('Failed to remove favorite');
+    }
+  }
+
   async function submit(e: FormEvent<HTMLFormElement>) {
     e.preventDefault();
     setError('');
@@ -382,6 +457,11 @@ export default function Home() {
     }
 
     setActivePageTab('finder');
+
+    // Save search history for logged-in users
+    if (user) {
+      saveSearchHistory(user.uid, query).catch(() => {});
+    }
 
     const searchKey = makeLocalSearchKey(query, edition, version, count);
     const savedSearch = loadSavedSearch(searchKey);
@@ -453,10 +533,10 @@ export default function Home() {
   const homeJsonLd = {
     '@context': 'https://schema.org',
     '@type': 'WebApplication',
-    name: 'AI Minecraft Seed Finder',
+    name: 'SeedFinder AI — Minecraft Seed Finder',
     applicationCategory: 'GameApplication',
     operatingSystem: 'Web',
-    description: 'Find real Minecraft seeds with source websites, Java/Bedrock edition details, versions, and coordinates.',
+    description: 'Find real Minecraft seeds with AI, source websites, Java/Bedrock edition details, versions, and coordinates.',
     url: 'https://seedfinder-ai-website.vercel.app',
     offers: { '@type': 'Offer', price: '0', priceCurrency: 'USD' }
   };
@@ -465,25 +545,83 @@ export default function Home() {
     if (!seed) return;
     await navigator.clipboard.writeText(seed);
     setCopiedSeed(seed);
+    showToast('📋 Seed copied!');
     setTimeout(() => setCopiedSeed(''), 1400);
   }
 
   return (
     <main className="shell">
       <AdsterraSocialBar />
+
+      {/* Toast notification */}
+      {toastMessage && (
+        <div className="toast-notification">
+          {toastMessage}
+        </div>
+      )}
+
+      {/* Auth modal */}
+      {showAuthModal && <AuthModal onClose={() => setShowAuthModal(false)} />}
+
+      {/* Modern Nav */}
       <nav className="top-nav" aria-label="Main navigation">
         <a className="brand-lockup" href="#finder">
           <span className="brand-icon">⛏️</span>
-          <span>SeedFinder AI</span>
+          <span>SeedFinder<span className="brand-ai">AI</span></span>
         </a>
-        <div className="nav-links">
-          <button className={activePageTab === 'finder' ? 'active' : ''} type="button" onClick={openFinder}>AI Finder</button>
-          <button type="button" onClick={openResults}>Results</button>
-          <button className={activePageTab === 'other' ? 'active' : ''} type="button" onClick={openOtherSeeds}>Other Seeds</button>
-          <a href="/seed-guides">Guides</a>
+
+        <button
+          className="mobile-menu-btn"
+          type="button"
+          onClick={() => setMobileMenuOpen(!mobileMenuOpen)}
+          aria-label="Toggle menu"
+        >
+          <span className={`hamburger ${mobileMenuOpen ? 'open' : ''}`} />
+        </button>
+
+        <div className={`nav-links ${mobileMenuOpen ? 'nav-open' : ''}`}>
+          <button className={activePageTab === 'finder' ? 'active' : ''} type="button" onClick={openFinder}>
+            <span className="nav-icon">🔍</span> AI Finder
+          </button>
+          <button className={activePageTab === 'daily' ? 'active' : ''} type="button" onClick={openDaily}>
+            <span className="nav-icon">🎯</span> Daily
+          </button>
+          <a href="/feed">
+            <span className="nav-icon">🌍</span> Feed
+          </a>
+          <button type="button" onClick={openResults}>
+            <span className="nav-icon">📊</span> Results
+          </button>
+          <button className={activePageTab === 'favorites' ? 'active' : ''} type="button" onClick={openFavorites}>
+            <span className="nav-icon">❤️</span> Favorites
+          </button>
+          <button className={activePageTab === 'other' ? 'active' : ''} type="button" onClick={openOtherSeeds}>
+            <span className="nav-icon">💾</span> Library
+          </button>
+          <a href="/seed-guides">
+            <span className="nav-icon">📖</span> Guides
+          </a>
+          
+          <div style={{ position: 'relative', marginLeft: '12px' }}>
+            <input 
+              type="text" 
+              placeholder="🔍 Search Users..." 
+              style={{ background: '#1e1e1e', color: '#fff', border: '2px solid #555', padding: '6px 12px', fontSize: '1.2rem', fontFamily: 'var(--font-pixel-read)' }}
+              onKeyDown={(e) => {
+                if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim() !== '') {
+                  window.location.href = `/u/${(e.target as HTMLInputElement).value.trim()}`;
+                }
+              }}
+            />
+          </div>
         </div>
+
+        <UserMenu onOpenAuth={() => setShowAuthModal(true)} />
       </nav>
+
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(homeJsonLd) }} />
+
+      {/* Hero Section */}
       <section className="hero">
         <div className="hero-inner">
           <div>
@@ -491,14 +629,25 @@ export default function Home() {
               <span className="badge">🌐 Web sourced</span>
               <span className="badge">🔐 Server-side API key</span>
               <span className="badge">⛏️ Java + Bedrock</span>
+              <span className="badge badge-new">✨ Daily Seeds</span>
             </div>
             <h1>
               AI Minecraft <span>Seed Finder</span>
             </h1>
             <p>
               Find real Minecraft seeds with source links, Java/Bedrock details, version info, and coordinates.
-              New verified results are saved under Other Seeds so players can reuse them easily.
+              Sign in to save favorites, get daily picks, and track your search history.
             </p>
+            <div className="hero-cta-row">
+              <button className="hero-cta" type="button" onClick={openFinder}>
+                Start Finding Seeds
+              </button>
+              {!user && (
+                <button className="hero-cta-secondary" type="button" onClick={() => setShowAuthModal(true)}>
+                  Sign Up Free
+                </button>
+              )}
+            </div>
           </div>
 
           <div className="process-card" aria-label="How the seed finder works">
@@ -508,20 +657,75 @@ export default function Home() {
             </div>
             <ol className="process-list">
               <li><span>1</span><div><strong>Describe</strong><p>Write the world style, edition, version, and structures.</p></div></li>
-              <li><span>2</span><div><strong>Search sources</strong><p>Gemini checks public web results with Google Search grounding.</p></div></li>
-              <li><span>3</span><div><strong>Save & reuse</strong><p>Verified seeds are stored in Other Seeds for quick access.</p></div></li>
+              <li><span>2</span><div><strong>AI Searches</strong><p>Gemini checks public web with Google Search grounding.</p></div></li>
+              <li><span>3</span><div><strong>Save & Reuse</strong><p>Save seeds to favorites and access them anytime.</p></div></li>
             </ol>
           </div>
         </div>
       </section>
 
+      {/* Stats Bar */}
       <section className="pro-stats" aria-label="Website features">
-        <div><strong>Google Search</strong><span>Gemini grounded sources</span></div>
-        <div><strong>Verified Links</strong><span>404/dead sources filtered</span></div>
-        <div><strong>Other Seeds</strong><span>Saved finds for everyone</span></div>
-        <div><strong>Fast Reuse</strong><span>Same searches use cache</span></div>
+        <div><strong>🔍 AI Search</strong><span>Gemini grounded sources</span></div>
+        <div><strong>✅ Verified</strong><span>404/dead sources filtered</span></div>
+        <div><strong>🎯 Daily Picks</strong><span>Fresh seeds every day</span></div>
+        <div><strong>❤️ Favorites</strong><span>Save with your account</span></div>
       </section>
 
+      {/* Daily Seeds Section */}
+      {activePageTab === 'daily' && (
+        <div id="daily-section">
+          <DailySeeds onCopySeed={(seed) => showToast(`📋 Seed ${seed} copied!`)} />
+        </div>
+      )}
+
+      {/* Favorites Section */}
+      {activePageTab === 'favorites' && user && (
+        <section className="favorites-section" id="favorites">
+          <div className="seo-section-head">
+            <span className="badge">❤️ My Favorites</span>
+            <h2>Saved Seeds</h2>
+            <p>Your personal collection of favorite Minecraft seeds. Sign in on any device to access them.</p>
+          </div>
+
+          {favorites.length > 0 ? (
+            <div className="seed-grid">
+              {favorites.map((seed, index) => (
+                <article className="seed-card" key={`fav-${seed.id || index}`}>
+                  <div className="seed-top">
+                    <h3>{seed.title || `Seed ${index + 1}`}</h3>
+                    <button
+                      className="fav-remove-btn"
+                      type="button"
+                      onClick={() => seed.id && removeFromFavorites(seed.id)}
+                      title="Remove from favorites"
+                    >
+                      ✕
+                    </button>
+                  </div>
+                  <div className="meta-row">
+                    <span className="meta">{seed.edition || 'Edition unknown'}</span>
+                    <span className="meta">{seed.version || 'Version unknown'}</span>
+                  </div>
+                  <div className="seed-box">
+                    <div className="seed-value">{seed.seed || 'No seed'}</div>
+                    <button className="copy-btn" type="button" onClick={() => copySeed(seed.seed)}>
+                      {copiedSeed === seed.seed ? '✓' : '📋'}
+                    </button>
+                  </div>
+                  {seed.whyMatches && <p className="fav-description">{seed.whyMatches}</p>}
+                </article>
+              ))}
+            </div>
+          ) : (
+            <div className="empty-card">
+              No favorites yet! Search for seeds and tap ❤️ to save them here.
+            </div>
+          )}
+        </section>
+      )}
+
+      {/* AI Finder Section */}
       {activePageTab === 'finder' && (
         <>
       <div className="responsive-ad-stack top-ad">
@@ -568,13 +772,13 @@ export default function Home() {
                   <option key={option} value={option}>{option}</option>
                 ))}
               </select>
-              <small>Gemini Google Search mode. Serper and Groq are not used.</small>
+              <small>Fewer results = faster + less API usage.</small>
             </div>
           </div>
 
           <div className="action-row">
             <button className="primary-btn" disabled={loading} type="submit">
-              {loading ? <><span className="loader" /> Searching real seeds...</> : 'Find Real Seeds'}
+              {loading ? <><span className="loader" /> Searching real seeds...</> : '⚡ Find Real Seeds'}
             </button>
             <button
               className="secondary-btn"
@@ -582,7 +786,7 @@ export default function Home() {
               type="button"
               onClick={() => setQuery(examples[Math.floor(Math.random() * examples.length)])}
             >
-              Try example
+              🎲 Try example
             </button>
             <span className="helper-text">For fastest results choose 5 seeds. If AI is busy, matching Other Seeds will appear instantly.</span>
           </div>
@@ -595,15 +799,17 @@ export default function Home() {
         <aside className="tips-card">
           <AdsterraBannerAd size="300x250" label="Sidebar advertisement" className="sidebar-ad" />
 
-          <h2>How to get good results</h2>
+          <h2>💡 Tips for better results</h2>
           <ul>
             <li>Choose Java, Bedrock, or Any.</li>
             <li>Write the Minecraft version if you know it.</li>
             <li>Add must-have places like village, mansion, trial chamber, or island.</li>
-            <li>Open Other Seeds later to reuse verified seeds without another search.</li>
+            <li>Sign in to save favorites and access them from any device.</li>
+            <li>Check Daily Picks for fresh seeds without using API.</li>
           </ul>
           <div className="status-strip">
-            This app uses Gemini Google Search only. Generated seeds are saved in your browser library and reused when you ask the same search again.
+            <strong>🟢 System Status</strong><br/>
+            Gemini Google Search active. Seeds are cached for instant re-use. API keys auto-rotate when rate limited.
           </div>
         </aside>
       </section>
@@ -613,7 +819,9 @@ export default function Home() {
 
         {!error && !result && !loading && (
           <div className="empty-card">
-            Results will appear here with seed numbers, edition, version, coordinates, and the website each seed came from.
+            <div className="empty-illustration">🌎</div>
+            <h3>Ready to explore</h3>
+            <p>Results will appear here with seed numbers, edition, version, coordinates, and the website each seed came from.</p>
           </div>
         )}
 
@@ -621,11 +829,13 @@ export default function Home() {
           <div className="results-card">
             <div className="results-header">
               <div>
-                <h2>Found seeds</h2>
+                <h2>🎉 Found seeds</h2>
                 <div className="query-pill" title={result.query}>Query: {result.query}</div>
               </div>
-              <div className="query-pill">Source: {result.cached ? 'Saved seed library/cache' : 'Gemini Google Search'}</div>
-              <div className="query-pill">Generated: {new Date(result.generatedAt).toLocaleString()}</div>
+              <div className="results-header-pills">
+                <div className="query-pill">{result.cached ? '💾 Cached' : '🤖 AI Generated'}</div>
+                <div className="query-pill">📅 {new Date(result.generatedAt).toLocaleString()}</div>
+              </div>
             </div>
 
             {result.disclaimer && <p className="notice">{result.disclaimer}</p>}
@@ -637,13 +847,23 @@ export default function Home() {
                 <article className="seed-card" key={`${seed.seed || 'seed'}-${index}`}>
                   <div className="seed-top">
                     <h3>{seed.title || `Seed ${index + 1}`}</h3>
-                    <span className="confidence">{seed.confidence || 'Check source'}</span>
+                    <div className="seed-top-actions">
+                      <button
+                        className="fav-btn"
+                        type="button"
+                        onClick={() => addToFavorites(seed)}
+                        title="Add to favorites"
+                      >
+                        ❤️
+                      </button>
+                      <span className="confidence">{seed.confidence || 'Check source'}</span>
+                    </div>
                   </div>
 
                   <div className="meta-row">
                     <span className="meta">{seed.edition || 'Edition unknown'}</span>
                     <span className="meta">{seed.version || 'Version unknown'}</span>
-                    {seed.spawn && <span className="meta">Spawn: {seed.spawn}</span>}
+                    {seed.spawn && <span className="meta">📍 {seed.spawn}</span>}
                   </div>
 
                   {!!seedTags(seed).length && (
@@ -655,20 +875,20 @@ export default function Home() {
                   <div className="seed-box">
                     <div className="seed-value">{seed.seed || 'Seed not shown by source'}</div>
                     <button className="copy-btn" type="button" onClick={() => copySeed(seed.seed)}>
-                      {copiedSeed === seed.seed ? 'Copied' : 'Copy'}
+                      {copiedSeed === seed.seed ? '✓ Copied' : '📋 Copy'}
                     </button>
                   </div>
 
                   {seed.whyMatches && (
                     <div className="card-section">
-                      <h4>Why this matches</h4>
+                      <h4>💡 Why this matches</h4>
                       <p>{seed.whyMatches}</p>
                     </div>
                   )}
 
                   {!!seed.features?.length && (
                     <div className="card-section">
-                      <h4>What is where</h4>
+                      <h4>📍 What is where</h4>
                       <ul className="feature-list">
                         {seed.features.map((feature, featureIndex) => (
                           <li className="feature-item" key={`${feature.name}-${featureIndex}`}>
@@ -685,7 +905,7 @@ export default function Home() {
 
                   {!!seed.sources?.length && (
                     <div className="card-section">
-                      <h4>Seed source</h4>
+                      <h4>🔗 Seed source</h4>
                       <ul className="source-list">
                         {normalizeSources(seed.sources).map((source, sourceIndex) => (
                           <li className="source-item" key={`${source.url || source.title}-${sourceIndex}`}>
@@ -703,7 +923,7 @@ export default function Home() {
 
                   {seed.notes && (
                     <div className="card-section">
-                      <h4>Notes</h4>
+                      <h4>📝 Notes</h4>
                       <p>{seed.notes}</p>
                     </div>
                   )}
@@ -713,7 +933,7 @@ export default function Home() {
 
             {!!allSources.length && (
               <div className="all-sources">
-                <h3>Websites used</h3>
+                <h3>🌐 Websites used</h3>
                 <ol>
                   {allSources.map((source, index) => (
                     <li key={`${source.url || source.title}-${index}`}>
@@ -739,7 +959,7 @@ export default function Home() {
       <section className="seed-library-section seed-tabs-section" id="seed-library">
         <div className="seo-section-head">
           <span className="badge">💾 Seed library</span>
-          <h2>Seed library</h2>
+          <h2>Seed Library</h2>
           <p>
             Use the tabs below: Other Seeds shows seeds discovered from searches, and Built-in Seeds shows ready-to-copy starter picks.
             {globalLibraryReady ? ' Global database is connected, so other players can see newly found seeds too.' : ' Global database is not connected yet, so this browser saves local seeds only.'}
@@ -778,13 +998,16 @@ export default function Home() {
                 <article className="library-card detailed-library-card">
                   <div className="seed-top">
                     <h3>{seed.title || (activeSeedTab === 'saved' ? 'Saved seed' : 'Preloaded seed')}</h3>
-                    <span className="confidence">{seed.confidence || (activeSeedTab === 'saved' ? 'Saved' : 'Preloaded')}</span>
+                    <div className="seed-top-actions">
+                      <button className="fav-btn" type="button" onClick={() => addToFavorites(seed)} title="Add to favorites">❤️</button>
+                      <span className="confidence">{seed.confidence || (activeSeedTab === 'saved' ? 'Saved' : 'Preloaded')}</span>
+                    </div>
                   </div>
                   <div className="seed-value small">{seed.seed}</div>
                   <div className="meta-row">
                     <span className="meta">{seed.edition}</span>
                     <span className="meta">{seed.version}</span>
-                    {seed.spawn && <span className="meta">Spawn: {seed.spawn}</span>}
+                    {seed.spawn && <span className="meta">📍 {seed.spawn}</span>}
                   </div>
                   {!!seedTags(seed).length && (
                     <div className="tag-row compact">
@@ -842,7 +1065,7 @@ export default function Home() {
                   )}
 
                   <button className="secondary-btn library-copy" type="button" onClick={() => copySeed(seed.seed)}>
-                    {copiedSeed === seed.seed ? 'Copied' : 'Copy seed'}
+                    {copiedSeed === seed.seed ? '✓ Copied' : '📋 Copy seed'}
                   </button>
                 </article>
 
@@ -885,16 +1108,24 @@ export default function Home() {
       </section>
 
       <footer className="footer">
-        <div>Built for Vercel. Keep your Google AI key in environment variables only.</div>
+        <div className="footer-brand">
+          <span>⛏️</span> SeedFinder AI
+        </div>
+        <p>Built with ❤️ for Minecraft players. Powered by Google Gemini AI.</p>
         <nav className="footer-links" aria-label="Footer links">
-          <a href="#seed-library" onClick={(e) => { e.preventDefault(); openOtherSeeds(); }}>Other Seeds</a>
-          <a href="/seed-guides">Seed Guides</a>
+          <a href="#seed-library" onClick={(e) => { e.preventDefault(); openOtherSeeds(); }}>Library</a>
+          <a href="/seed-guides">Guides</a>
           <a href="/about">About</a>
           <a href="/privacy">Privacy</a>
           <a href="/terms">Terms</a>
           <a href="/contact">Contact</a>
         </nav>
+        <small className="footer-copy">© {new Date().getFullYear()} SeedFinder AI. Not affiliated with Mojang or Microsoft.</small>
       </footer>
     </main>
   );
+}
+
+export default function Home() {
+  return <HomeContent />;
 }
