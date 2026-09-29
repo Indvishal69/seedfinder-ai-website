@@ -164,7 +164,7 @@ export default function RateSiteWidget() {
 
             <div className="auth-header">
               <div style={{ textAlign: 'center', marginBottom: '14px' }}>
-                <img src="/logo.jpg" alt="SeedFinder AI" style={{ width: 72, height: 72, borderRadius: 12, margin: '0 auto', display: 'block', border: '2px solid #555', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }} />
+                <img src="/favicon.png" alt="SeedFinder AI" style={{ width: 64, height: 64, borderRadius: 8, margin: '0 auto', display: 'block', border: '2px solid var(--mc-text-blue)', imageRendering: 'pixelated', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }} />
               </div>
               <h2>Rate SeedFinder AI</h2>
               <p>Your review helps us make the best Minecraft seed finder in the world!</p>

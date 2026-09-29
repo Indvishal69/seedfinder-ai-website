@@ -633,168 +633,282 @@ export default function FeedPage() {
 
       {/* Create Post Modal */}
       {isModalOpen && (
-        <div className="auth-overlay">
-          <div className="auth-modal">
-            <button className="auth-close" onClick={() => setIsModalOpen(false)}>×</button>
-            <div className="auth-header">
-              <h2>Create a Post</h2>
-              <p>Share a Minecraft seed, build, or tool!</p>
-            </div>
-            
-            {postError && <div className="auth-error">{postError}</div>}
-            
-            <form onSubmit={handlePostSubmit}>
-              <div className="auth-field">
-                <label>Title</label>
-                <input 
-                  type="text" 
-                  value={postTitle} 
-                  onChange={e => setPostTitle(e.target.value)} 
-                  maxLength={100}
-                  placeholder="e.g. Quad Witch Hut & Cherry Grove Spawn!"
-                  required 
-                  style={{ width: '100%' }}
-                />
-              </div>
-
-              <div className="auth-field">
-                <label>Minecraft Seed (Optional - Connects with AI Seed Finder)</label>
-                <input 
-                  type="text" 
-                  value={postSeed} 
-                  onChange={e => setPostSeed(e.target.value)} 
-                  placeholder="e.g. -74920481028472 or 865219482"
-                  style={{ width: '100%', fontFamily: 'monospace', color: '#4dedf4' }}
-                />
-                <span style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px', display: 'block' }}>
-                  💡 Adding a seed gives your post an interactive Seed Card with one-click copy and AI Finder exploration!
-                </span>
-              </div>
-
-              <div className="auth-field">
-                <label>Message (like Instagram)</label>
-                <textarea 
-                  value={postContent} 
-                  onChange={e => setPostContent(e.target.value)} 
-                  placeholder="Describe your seed, coordinates, build, or adventure..."
-                  required
-                  style={{ width: '100%', minHeight: '100px' }}
-                />
-              </div>
-
-              {/* Tags Selector */}
-              <div className="auth-field">
-                <label>Tags (Select from 100+ Minecraft Tags)</label>
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
-                  {postTags.map(tag => (
-                    <span 
-                      key={tag} 
-                      style={{ 
-                        background: '#1c2833', 
-                        color: '#4dedf4', 
-                        border: '1px solid var(--mc-text-blue)', 
-                        padding: '3px 8px', 
-                        fontSize: '0.9rem', 
-                        fontFamily: 'var(--font-pixel-read)', 
-                        display: 'flex', 
-                        alignItems: 'center', 
-                        gap: '6px' 
-                      }}
-                    >
-                      #{tag}
-                      <button 
-                        type="button" 
-                        onClick={() => setPostTags(postTags.filter(t => t !== tag))}
-                        style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
-                      >
-                        ×
-                      </button>
-                    </span>
-                  ))}
+        <div className="auth-overlay" onClick={() => setIsModalOpen(false)}>
+          <div className="auth-modal structured" onClick={e => e.stopPropagation()}>
+            <form onSubmit={handlePostSubmit} style={{ display: 'flex', flexDirection: 'column', height: '100%', maxHeight: '90vh' }}>
+              
+              {/* Modal Header */}
+              <div className="auth-modal-header" style={{ display: 'flex', alignItems: 'flex-start', justifyContent: 'space-between' }}>
+                <div>
+                  <h2 style={{ margin: 0, fontSize: '1.4rem', color: '#1e293b' }}>Create a Post</h2>
+                  <p style={{ margin: '4px 0 0', fontSize: '0.9rem', color: '#475569', fontFamily: 'var(--font-sans)' }}>
+                    Share a Minecraft seed, build, or adventure with the community!
+                  </p>
                 </div>
-
-                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
-                  <input
-                    type="text"
-                    value={tagSearchInput}
-                    onChange={e => setTagSearchInput(e.target.value)}
-                    placeholder="Search 100+ tags (e.g. cherry, trial, speedrun)..."
-                    style={{ flex: 1, fontSize: '0.95rem' }}
-                    onKeyDown={e => {
-                      if (e.key === 'Enter') {
-                        e.preventDefault();
-                        const cleaned = tagSearchInput.trim().replace(/^#/, '');
-                        if (cleaned && !postTags.includes(cleaned)) {
-                          setPostTags([...postTags, cleaned]);
-                          setTagSearchInput('');
-                        }
-                      }
-                    }}
-                  />
-                  <button 
-                    type="button" 
-                    className="secondary-btn"
-                    onClick={() => {
-                      const cleaned = tagSearchInput.trim().replace(/^#/, '');
-                      if (cleaned && !postTags.includes(cleaned)) {
-                        setPostTags([...postTags, cleaned]);
-                        setTagSearchInput('');
-                      }
-                    }}
-                  >
-                    + Add
-                  </button>
-                </div>
-
-                {/* Autocomplete / Suggestions */}
-                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '72px', overflowY: 'auto' }}>
-                  {(tagSearchInput ? searchTags(tagSearchInput).slice(0, 10) : POPULAR_TAGS.slice(0, 12)).map(tag => {
-                    const isSelected = postTags.includes(tag);
-                    return (
-                      <button
-                        key={tag}
-                        type="button"
-                        onClick={() => {
-                          if (isSelected) {
-                            setPostTags(postTags.filter(t => t !== tag));
-                          } else {
-                            setPostTags([...postTags, tag]);
-                          }
-                        }}
-                        style={{
-                          background: isSelected ? 'var(--mc-text-yellow)' : '#262626',
-                          color: isSelected ? '#111' : '#aaa',
-                          border: isSelected ? '1px solid var(--mc-text-yellow)' : '1px solid #444',
-                          padding: '2px 8px',
-                          fontSize: '0.85rem',
-                          cursor: 'pointer',
-                          fontFamily: 'var(--font-pixel-read)'
-                        }}
-                      >
-                        {isSelected ? '✓ ' : '+ '}#{tag}
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              <div className="auth-field">
-                <label>Add Image</label>
-                <input 
-                  type="file" 
-                  accept="image/*" 
-                  ref={fileInputRef} 
-                  onChange={e => setPostImageFile(e.target.files?.[0] || null)}
-                  style={{ display: 'none' }}
-                />
-                <button type="button" className="secondary-btn" onClick={() => fileInputRef.current?.click()} style={{ width: '100%' }}>
-                  {postImageFile ? postImageFile.name : '📸 Upload Screenshot or Image'}
+                <button 
+                  type="button" 
+                  className="auth-close" 
+                  onClick={() => setIsModalOpen(false)}
+                  title="Close modal"
+                >
+                  ✕
                 </button>
               </div>
 
-              <button type="submit" className="primary-btn" disabled={isPosting} style={{ width: '100%', marginTop: '16px' }}>
-                {isPosting ? 'Posting...' : 'Post to Minecraft Hub'}
-              </button>
+              {/* Scrollable Body */}
+              <div className="auth-modal-body">
+                {postError && <div className="auth-error">{postError}</div>}
+
+                <div className="auth-field">
+                  <label>Post Title *</label>
+                  <input 
+                    type="text" 
+                    value={postTitle} 
+                    onChange={e => setPostTitle(e.target.value)} 
+                    maxLength={100}
+                    placeholder="e.g. Quad Witch Hut & Cherry Grove Spawn!"
+                    required 
+                    style={{ width: '100%' }}
+                  />
+                </div>
+
+                <div className="auth-field">
+                  <label>Minecraft Seed (Optional — Connects to AI Finder)</label>
+                  <input 
+                    type="text" 
+                    value={postSeed} 
+                    onChange={e => setPostSeed(e.target.value)} 
+                    placeholder="e.g. -74920481028472 or 865219482"
+                    style={{ width: '100%', fontFamily: 'monospace', color: '#38bdf8' }}
+                  />
+                  <span style={{ fontSize: '0.85rem', color: '#64748b', marginTop: '4px', display: 'block', fontFamily: 'var(--font-sans)' }}>
+                    💡 Generates an interactive Seed Card with one-click copy and AI Finder exploration!
+                  </span>
+                </div>
+
+                <div className="auth-field">
+                  <label>Message / Description *</label>
+                  <textarea 
+                    value={postContent} 
+                    onChange={e => setPostContent(e.target.value)} 
+                    placeholder="Describe your seed, coordinates, build, or adventure..."
+                    required
+                    style={{ width: '100%', minHeight: '90px' }}
+                  />
+                </div>
+
+                {/* Tags Selector */}
+                <div className="auth-field">
+                  <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '6px' }}>
+                    <label style={{ margin: 0 }}>Tags ({postTags.length}/5 max)</label>
+                    {postTags.length > 0 && (
+                      <button 
+                        type="button" 
+                        onClick={() => setPostTags([])}
+                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'var(--font-sans)', textDecoration: 'underline', padding: 0 }}
+                      >
+                        Clear all tags
+                      </button>
+                    )}
+                  </div>
+
+                  {/* Selected Tag Chips */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                    {postTags.map(tag => (
+                      <span 
+                        key={tag} 
+                        style={{ 
+                          background: '#1e293b', 
+                          color: '#38bdf8', 
+                          border: '1px solid #0284c7', 
+                          padding: '4px 10px', 
+                          fontSize: '0.85rem', 
+                          fontFamily: 'var(--font-sans)',
+                          fontWeight: 500,
+                          borderRadius: '4px',
+                          display: 'inline-flex', 
+                          alignItems: 'center', 
+                          gap: '8px' 
+                        }}
+                      >
+                        #{tag}
+                        <button 
+                          type="button" 
+                          onClick={() => setPostTags(postTags.filter(t => t !== tag))}
+                          style={{ 
+                            background: 'rgba(239, 68, 68, 0.2)', 
+                            border: '1px solid rgba(239, 68, 68, 0.5)', 
+                            color: '#f87171', 
+                            borderRadius: '50%',
+                            width: '18px',
+                            height: '18px',
+                            display: 'inline-flex',
+                            alignItems: 'center',
+                            justifyContent: 'center',
+                            fontSize: '11px',
+                            cursor: 'pointer', 
+                            padding: 0,
+                            lineHeight: 1
+                          }}
+                          title={`Remove #${tag}`}
+                        >
+                          ✕
+                        </button>
+                      </span>
+                    ))}
+                  </div>
+
+                  {/* Tag Search Input */}
+                  <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                    <input
+                      type="text"
+                      value={tagSearchInput}
+                      onChange={e => setTagSearchInput(e.target.value)}
+                      placeholder="Search 100+ tags (e.g. cherry, trial, speedrun)..."
+                      style={{ flex: 1, fontSize: '0.9rem' }}
+                      onKeyDown={e => {
+                        if (e.key === 'Enter') {
+                          e.preventDefault();
+                          const cleaned = tagSearchInput.trim().replace(/^#/, '');
+                          if (cleaned && !postTags.includes(cleaned)) {
+                            if (postTags.length >= 5) {
+                              alert('Maximum 5 tags per post.');
+                              return;
+                            }
+                            setPostTags([...postTags, cleaned]);
+                            setTagSearchInput('');
+                          }
+                        }
+                      }}
+                    />
+                    <button 
+                      type="button" 
+                      className="secondary-btn"
+                      style={{ padding: '8px 14px', fontSize: '0.85rem', fontFamily: 'var(--font-sans)' }}
+                      onClick={() => {
+                        const cleaned = tagSearchInput.trim().replace(/^#/, '');
+                        if (cleaned && !postTags.includes(cleaned)) {
+                          if (postTags.length >= 5) {
+                            alert('Maximum 5 tags per post.');
+                            return;
+                          }
+                          setPostTags([...postTags, cleaned]);
+                          setTagSearchInput('');
+                        }
+                      }}
+                    >
+                      + Add
+                    </button>
+                  </div>
+
+                  {/* Autocomplete / Suggestions */}
+                  <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', maxHeight: '80px', overflowY: 'auto' }}>
+                    {(tagSearchInput ? searchTags(tagSearchInput).slice(0, 10) : POPULAR_TAGS.slice(0, 12)).map(tag => {
+                      const isSelected = postTags.includes(tag);
+                      return (
+                        <button
+                          key={tag}
+                          type="button"
+                          onClick={() => {
+                            if (isSelected) {
+                              setPostTags(postTags.filter(t => t !== tag));
+                            } else {
+                              if (postTags.length >= 5) {
+                                alert('Maximum 5 tags per post.');
+                                return;
+                              }
+                              setPostTags([...postTags, tag]);
+                            }
+                          }}
+                          style={{
+                            background: isSelected ? '#15803d' : '#262626',
+                            color: isSelected ? '#ffffff' : '#cbd5e1',
+                            border: isSelected ? '1px solid #22c55e' : '1px solid #404040',
+                            padding: '3px 8px',
+                            fontSize: '0.82rem',
+                            borderRadius: '3px',
+                            cursor: 'pointer',
+                            fontFamily: 'var(--font-sans)',
+                            fontWeight: 500,
+                            transition: 'all 0.15s'
+                          }}
+                        >
+                          {isSelected ? '✓ ' : '+ '}#{tag}
+                        </button>
+                      );
+                    })}
+                  </div>
+                </div>
+
+                {/* Add Image */}
+                <div className="auth-field" style={{ marginBottom: 0 }}>
+                  <label>Add Image (Optional)</label>
+                  <input 
+                    type="file" 
+                    accept="image/*" 
+                    ref={fileInputRef} 
+                    onChange={e => setPostImageFile(e.target.files?.[0] || null)}
+                    style={{ display: 'none' }}
+                  />
+                  <div style={{ display: 'flex', gap: '8px', alignItems: 'center' }}>
+                    <button 
+                      type="button" 
+                      className="secondary-btn" 
+                      onClick={() => fileInputRef.current?.click()} 
+                      style={{ flex: 1, padding: '10px 14px', fontFamily: 'var(--font-sans)', fontSize: '0.9rem' }}
+                    >
+                      {postImageFile ? `📸 ${postImageFile.name}` : '📸 Upload Screenshot or Image'}
+                    </button>
+                    {postImageFile && (
+                      <button 
+                        type="button" 
+                        onClick={() => setPostImageFile(null)} 
+                        style={{ background: 'none', border: 'none', color: '#ef4444', fontSize: '0.85rem', cursor: 'pointer', fontFamily: 'var(--font-sans)', textDecoration: 'underline' }}
+                      >
+                        Remove
+                      </button>
+                    )}
+                  </div>
+                </div>
+              </div>
+
+              {/* Sticky Footer with Guaranteed Visible Publish Button */}
+              <div className="auth-modal-footer">
+                <button 
+                  type="button" 
+                  className="secondary-btn" 
+                  onClick={() => setIsModalOpen(false)}
+                  style={{ padding: '10px 16px', fontSize: '0.95rem', fontFamily: 'var(--font-sans)' }}
+                >
+                  Cancel
+                </button>
+
+                <button 
+                  type="submit" 
+                  disabled={isPosting || !postTitle.trim() || !postContent.trim()} 
+                  style={{ 
+                    flex: 1, 
+                    padding: '12px 20px', 
+                    fontSize: '1.05rem', 
+                    fontWeight: 'bold',
+                    fontFamily: 'var(--font-sans)',
+                    background: isPosting ? '#666' : '#16a34a',
+                    color: '#ffffff',
+                    border: '3px solid #14532d',
+                    boxShadow: 'inset 2px 2px 0px rgba(255,255,255,0.4), inset -2px -2px 0px rgba(0,0,0,0.4)',
+                    borderRadius: '3px',
+                    cursor: isPosting || !postTitle.trim() || !postContent.trim() ? 'not-allowed' : 'pointer',
+                    display: 'flex',
+                    alignItems: 'center',
+                    justifyContent: 'center',
+                    gap: '8px',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  {isPosting ? '⏳ Publishing...' : '🚀 Publish Post'}
+                </button>
+              </div>
+
             </form>
           </div>
         </div>

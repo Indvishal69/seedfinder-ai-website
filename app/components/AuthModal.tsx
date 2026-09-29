@@ -92,7 +92,7 @@ export default function AuthModal({ onClose }: { onClose: () => void }) {
 
         <div className="auth-header">
           <div style={{ textAlign: 'center', marginBottom: '14px' }}>
-            <img src="/logo.jpg" alt="SeedFinder AI" style={{ width: 72, height: 72, borderRadius: 12, margin: '0 auto', display: 'block', border: '2px solid #555', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }} />
+            <img src="/favicon.png" alt="SeedFinder AI" style={{ width: 64, height: 64, borderRadius: 8, margin: '0 auto', display: 'block', border: '2px solid var(--mc-text-blue)', imageRendering: 'pixelated', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }} />
           </div>
           <h2>{mode === 'login' ? 'Welcome Back' : 'Join SeedFinder AI'}</h2>
           <p>{mode === 'login' ? 'Sign in to save your favorite seeds' : 'Create an account to unlock all features'}</p>
