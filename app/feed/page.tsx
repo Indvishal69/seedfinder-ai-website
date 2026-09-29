@@ -15,6 +15,7 @@ import {
   getPinnedPostId
 } from '../lib/firebase';
 import { uploadImageToImgBB } from '../lib/imgbb';
+import { POPULAR_TAGS, ALL_MINECRAFT_TAGS, searchTags } from '../lib/tags';
 import Link from 'next/link';
 
 export default function FeedPage() {
@@ -27,9 +28,14 @@ export default function FeedPage() {
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [postTitle, setPostTitle] = useState('');
   const [postContent, setPostContent] = useState('');
+  const [postSeed, setPostSeed] = useState('');
+  const [postTags, setPostTags] = useState<string[]>(['MinecraftHub', 'MinecraftPost']);
+  const [tagSearchInput, setTagSearchInput] = useState('');
   const [postImageFile, setPostImageFile] = useState<File | null>(null);
   const [isPosting, setIsPosting] = useState(false);
   const [postError, setPostError] = useState('');
+  
+  const [selectedTag, setSelectedTag] = useState<string | null>(null);
   
   const [openCommentsFor, setOpenCommentsFor] = useState<string | null>(null);
   const [commentsMap, setCommentsMap] = useState<Record<string, Comment[]>>({});
@@ -45,6 +51,23 @@ export default function FeedPage() {
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const [feedType, setFeedType] = useState<'global' | 'following'>('global');
+
+  useEffect(() => {
+    if (typeof window !== 'undefined') {
+      const params = new URLSearchParams(window.location.search);
+      const shareSeed = params.get('shareSeed');
+      if (shareSeed) {
+        setPostTitle(params.get('title') || 'Featured Minecraft Seed');
+        setPostSeed(shareSeed);
+        const desc = params.get('desc') || '';
+        setPostContent(desc ? `${desc}\n\nSeed Code: ${shareSeed}` : `Check out this amazing seed: ${shareSeed}`);
+        setPostTags(['MinecraftHub', 'SeedShowcase', 'MinecraftPost']);
+        setIsModalOpen(true);
+      }
+      const tagParam = params.get('tag');
+      if (tagParam) setSelectedTag(tagParam);
+    }
+  }, []);
 
   useEffect(() => {
     if (user) {
@@ -94,7 +117,14 @@ export default function FeedPage() {
         }
       }
       
-      const newPost = await createPost(user.uid, postTitle.trim(), postContent.trim(), images);
+      const newPost = await createPost(
+        user.uid, 
+        postTitle.trim(), 
+        postContent.trim(), 
+        images, 
+        postSeed.trim(), 
+        postTags
+      );
       
       // Inject author data for optimistic UI
       newPost.author = {
@@ -110,6 +140,8 @@ export default function FeedPage() {
       setIsModalOpen(false);
       setPostTitle('');
       setPostContent('');
+      setPostSeed('');
+      setPostTags(['MinecraftHub', 'MinecraftPost']);
       setPostImageFile(null);
     } catch (err: any) {
       setPostError(err.message || 'Failed to create post.');
@@ -222,12 +254,25 @@ export default function FeedPage() {
     }
   };
 
+  const filteredPosts = posts.filter(post => {
+    if (!selectedTag) return true;
+    const tagLower = selectedTag.toLowerCase();
+    if (post.tags && post.tags.some(t => t.toLowerCase() === tagLower)) return true;
+    return (
+      post.title.toLowerCase().includes(tagLower) ||
+      post.content.toLowerCase().includes(tagLower) ||
+      (post.seedData && post.seedData.includes(tagLower))
+    );
+  });
+
   return (
     <div className="shell">
       <div style={{ maxWidth: 680, margin: '0 auto' }}>
         
         <div style={{ display: 'flex', justifyContent: 'space-between', alignItems: 'center', marginBottom: '24px' }}>
-          <h2 style={{ margin: 0, color: 'var(--mc-text-yellow)' }}>Social Feed</h2>
+          <h2 style={{ margin: 0, color: 'var(--mc-text-yellow)', display: 'flex', alignItems: 'center', gap: '8px' }}>
+            <span>⛏️</span> Social Feed
+          </h2>
           {user && (
             <button className="primary-btn" onClick={() => setIsModalOpen(true)}>
               + New Post
@@ -236,7 +281,7 @@ export default function FeedPage() {
         </div>
         
         {user && (
-          <div className="seed-tabs" style={{ marginBottom: '24px' }}>
+          <div className="seed-tabs" style={{ marginBottom: '16px' }}>
             <button 
               className={`seed-tab ${feedType === 'global' ? 'active' : ''}`}
               onClick={() => setFeedType('global')}
@@ -252,18 +297,91 @@ export default function FeedPage() {
           </div>
         )}
 
+        {/* 100+ Tags Filter Scrollbar */}
+        <div style={{ 
+          display: 'flex', 
+          gap: '8px', 
+          overflowX: 'auto', 
+          paddingBottom: '12px', 
+          marginBottom: '24px', 
+          scrollbarWidth: 'thin' 
+        }}>
+          <button
+            type="button"
+            onClick={() => setSelectedTag(null)}
+            style={{
+              background: selectedTag === null ? 'var(--mc-text-yellow)' : '#222',
+              color: selectedTag === null ? '#111' : '#ccc',
+              border: '2px solid #444',
+              padding: '6px 14px',
+              fontSize: '1rem',
+              fontFamily: 'var(--font-pixel-read)',
+              borderRadius: '2px',
+              cursor: 'pointer',
+              fontWeight: 'bold',
+              whiteSpace: 'nowrap'
+            }}
+          >
+            🌟 All
+          </button>
+          {POPULAR_TAGS.map(tag => (
+            <button
+              key={tag}
+              type="button"
+              onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+              style={{
+                background: selectedTag === tag ? 'var(--mc-text-yellow)' : '#242424',
+                color: selectedTag === tag ? '#111' : '#4dedf4',
+                border: selectedTag === tag ? '2px solid var(--mc-text-yellow)' : '2px solid #3d3d3d',
+                padding: '6px 12px',
+                fontSize: '1rem',
+                fontFamily: 'var(--font-pixel-read)',
+                borderRadius: '2px',
+                cursor: 'pointer',
+                fontWeight: 'bold',
+                whiteSpace: 'nowrap',
+                transition: 'all 0.15s'
+              }}
+            >
+              #{tag}
+            </button>
+          ))}
+        </div>
+
+        {selectedTag && (
+          <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', background: '#1c2833', border: '1px solid var(--mc-text-blue)', padding: '8px 14px', marginBottom: '20px' }}>
+            <span style={{ color: '#93c5fd', fontSize: '1.1rem', fontFamily: 'var(--font-pixel-read)' }}>
+              Filtering by tag: <strong>#{selectedTag}</strong> ({filteredPosts.length} posts)
+            </span>
+            <button 
+              type="button" 
+              onClick={() => setSelectedTag(null)}
+              style={{ background: 'none', border: 'none', color: '#ff6666', cursor: 'pointer', fontWeight: 'bold' }}
+            >
+              ✕ Clear Filter
+            </button>
+          </div>
+        )}
+
         {loading ? (
           <div style={{ textAlign: 'center', margin: '48px 0' }}>
             <div className="loader"></div> Loading feed...
           </div>
-        ) : posts.length === 0 ? (
+        ) : filteredPosts.length === 0 ? (
           <div className="empty-card" style={{ textAlign: 'center' }}>
-            <h3 style={{ color: '#3f3f3f' }}>The feed is quiet.</h3>
-            <p style={{ color: '#555555' }}>Be the first to post a seed or Minecraft moment!</p>
+            <h3 style={{ color: '#3f3f3f' }}>{selectedTag ? `No posts tagged with #${selectedTag}` : 'The feed is quiet.'}</h3>
+            <p style={{ color: '#555555' }}>
+              {selectedTag ? 'Be the first to post using this tag!' : 'Be the first to post a seed or Minecraft moment!'}
+            </p>
+            {user && (
+              <button className="primary-btn" style={{ marginTop: '12px' }} onClick={() => setIsModalOpen(true)}>
+                + Create First Post
+              </button>
+            )}
           </div>
         ) : (
           <div style={{ display: 'grid', gap: '24px' }}>
-            {posts.map((post) => (
+            {filteredPosts.map((post) => (
               <div key={post.id} className="form-card" style={{ padding: '20px' }}>
                 {/* Pinned badge */}
                 {(post.isPinned || (user?.uid === post.authorId && pinnedPostId === post.id)) && (
@@ -301,6 +419,74 @@ export default function FeedPage() {
                 <p style={{ margin: '0 0 16px', fontFamily: 'var(--font-pixel-read)', fontSize: '1.2rem', color: '#555555', whiteSpace: 'pre-wrap' }}>
                   {post.content}
                 </p>
+
+                {/* Embedded Interactive Seed Box if post has seedData */}
+                {post.seedData && (
+                  <div style={{ 
+                    background: '#131e24', 
+                    border: '2px solid #2bb7c0', 
+                    padding: '12px 16px', 
+                    borderRadius: '3px', 
+                    marginBottom: '16px', 
+                    display: 'flex', 
+                    justifyContent: 'space-between', 
+                    alignItems: 'center', 
+                    flexWrap: 'wrap', 
+                    gap: '10px' 
+                  }}>
+                    <div>
+                      <div style={{ color: 'var(--mc-text-yellow)', fontSize: '0.85rem', fontWeight: 'bold', fontFamily: 'var(--font-pixel-read)' }}>
+                        ⛏️ MINECRAFT SEED
+                      </div>
+                      <code style={{ color: '#4dedf4', fontSize: '1.25rem', fontFamily: 'monospace', fontWeight: 'bold' }}>
+                        {post.seedData}
+                      </code>
+                    </div>
+                    <div style={{ display: 'flex', gap: '8px' }}>
+                      <button 
+                        className="secondary-btn" 
+                        style={{ padding: '4px 10px', fontSize: '0.9rem' }}
+                        onClick={() => {
+                          navigator.clipboard.writeText(post.seedData!);
+                          alert(`📋 Seed ${post.seedData} copied!`);
+                        }}
+                      >
+                        📋 Copy Seed
+                      </button>
+                      <Link href={`/?q=${encodeURIComponent(post.seedData)}`}>
+                        <button className="primary-btn" style={{ padding: '4px 10px', fontSize: '0.9rem' }}>
+                          🔍 AI Finder
+                        </button>
+                      </Link>
+                    </div>
+                  </div>
+                )}
+
+                {/* Post Tags Chips */}
+                {post.tags && post.tags.length > 0 && (
+                  <div style={{ display: 'flex', gap: '6px', flexWrap: 'wrap', marginBottom: '14px' }}>
+                    {post.tags.map(tag => (
+                      <span 
+                        key={tag}
+                        onClick={() => setSelectedTag(selectedTag === tag ? null : tag)}
+                        style={{ 
+                          cursor: 'pointer', 
+                          background: selectedTag === tag ? 'var(--mc-text-yellow)' : '#262626', 
+                          color: selectedTag === tag ? '#111' : '#4dedf4', 
+                          padding: '3px 8px', 
+                          fontSize: '0.9rem', 
+                          borderRadius: '2px', 
+                          fontFamily: 'var(--font-pixel-read)',
+                          fontWeight: 'bold',
+                          border: '1px solid #444'
+                        }}
+                        title={`Filter by #${tag}`}
+                      >
+                        #{tag}
+                      </span>
+                    ))}
+                  </div>
+                )}
 
                 {/* Images */}
                 {post.images && post.images.length > 0 && (
@@ -465,9 +651,24 @@ export default function FeedPage() {
                   value={postTitle} 
                   onChange={e => setPostTitle(e.target.value)} 
                   maxLength={100}
+                  placeholder="e.g. Quad Witch Hut & Cherry Grove Spawn!"
                   required 
                   style={{ width: '100%' }}
                 />
+              </div>
+
+              <div className="auth-field">
+                <label>Minecraft Seed (Optional - Connects with AI Seed Finder)</label>
+                <input 
+                  type="text" 
+                  value={postSeed} 
+                  onChange={e => setPostSeed(e.target.value)} 
+                  placeholder="e.g. -74920481028472 or 865219482"
+                  style={{ width: '100%', fontFamily: 'monospace', color: '#4dedf4' }}
+                />
+                <span style={{ fontSize: '0.85rem', color: '#888', marginTop: '4px', display: 'block' }}>
+                  💡 Adding a seed gives your post an interactive Seed Card with one-click copy and AI Finder exploration!
+                </span>
               </div>
 
               <div className="auth-field">
@@ -475,9 +676,106 @@ export default function FeedPage() {
                 <textarea 
                   value={postContent} 
                   onChange={e => setPostContent(e.target.value)} 
+                  placeholder="Describe your seed, coordinates, build, or adventure..."
                   required
-                  style={{ width: '100%', minHeight: '120px' }}
+                  style={{ width: '100%', minHeight: '100px' }}
                 />
+              </div>
+
+              {/* Tags Selector */}
+              <div className="auth-field">
+                <label>Tags (Select from 100+ Minecraft Tags)</label>
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '6px', marginBottom: '8px' }}>
+                  {postTags.map(tag => (
+                    <span 
+                      key={tag} 
+                      style={{ 
+                        background: '#1c2833', 
+                        color: '#4dedf4', 
+                        border: '1px solid var(--mc-text-blue)', 
+                        padding: '3px 8px', 
+                        fontSize: '0.9rem', 
+                        fontFamily: 'var(--font-pixel-read)', 
+                        display: 'flex', 
+                        alignItems: 'center', 
+                        gap: '6px' 
+                      }}
+                    >
+                      #{tag}
+                      <button 
+                        type="button" 
+                        onClick={() => setPostTags(postTags.filter(t => t !== tag))}
+                        style={{ background: 'none', border: 'none', color: '#f87171', cursor: 'pointer', padding: 0, fontWeight: 'bold' }}
+                      >
+                        ×
+                      </button>
+                    </span>
+                  ))}
+                </div>
+
+                <div style={{ display: 'flex', gap: '8px', marginBottom: '8px' }}>
+                  <input
+                    type="text"
+                    value={tagSearchInput}
+                    onChange={e => setTagSearchInput(e.target.value)}
+                    placeholder="Search 100+ tags (e.g. cherry, trial, speedrun)..."
+                    style={{ flex: 1, fontSize: '0.95rem' }}
+                    onKeyDown={e => {
+                      if (e.key === 'Enter') {
+                        e.preventDefault();
+                        const cleaned = tagSearchInput.trim().replace(/^#/, '');
+                        if (cleaned && !postTags.includes(cleaned)) {
+                          setPostTags([...postTags, cleaned]);
+                          setTagSearchInput('');
+                        }
+                      }
+                    }}
+                  />
+                  <button 
+                    type="button" 
+                    className="secondary-btn"
+                    onClick={() => {
+                      const cleaned = tagSearchInput.trim().replace(/^#/, '');
+                      if (cleaned && !postTags.includes(cleaned)) {
+                        setPostTags([...postTags, cleaned]);
+                        setTagSearchInput('');
+                      }
+                    }}
+                  >
+                    + Add
+                  </button>
+                </div>
+
+                {/* Autocomplete / Suggestions */}
+                <div style={{ display: 'flex', flexWrap: 'wrap', gap: '4px', maxHeight: '72px', overflowY: 'auto' }}>
+                  {(tagSearchInput ? searchTags(tagSearchInput).slice(0, 10) : POPULAR_TAGS.slice(0, 12)).map(tag => {
+                    const isSelected = postTags.includes(tag);
+                    return (
+                      <button
+                        key={tag}
+                        type="button"
+                        onClick={() => {
+                          if (isSelected) {
+                            setPostTags(postTags.filter(t => t !== tag));
+                          } else {
+                            setPostTags([...postTags, tag]);
+                          }
+                        }}
+                        style={{
+                          background: isSelected ? 'var(--mc-text-yellow)' : '#262626',
+                          color: isSelected ? '#111' : '#aaa',
+                          border: isSelected ? '1px solid var(--mc-text-yellow)' : '1px solid #444',
+                          padding: '2px 8px',
+                          fontSize: '0.85rem',
+                          cursor: 'pointer',
+                          fontFamily: 'var(--font-pixel-read)'
+                        }}
+                      >
+                        {isSelected ? '✓ ' : '+ '}#{tag}
+                      </button>
+                    );
+                  })}
+                </div>
               </div>
 
               <div className="auth-field">
@@ -490,12 +788,12 @@ export default function FeedPage() {
                   style={{ display: 'none' }}
                 />
                 <button type="button" className="secondary-btn" onClick={() => fileInputRef.current?.click()} style={{ width: '100%' }}>
-                  {postImageFile ? postImageFile.name : '📸 Upload Image'}
+                  {postImageFile ? postImageFile.name : '📸 Upload Screenshot or Image'}
                 </button>
               </div>
 
               <button type="submit" className="primary-btn" disabled={isPosting} style={{ width: '100%', marginTop: '16px' }}>
-                {isPosting ? 'Posting...' : 'Post'}
+                {isPosting ? 'Posting...' : 'Post to Minecraft Hub'}
               </button>
             </form>
           </div>

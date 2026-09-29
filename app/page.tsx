@@ -7,6 +7,7 @@ import AuthModal from './components/AuthModal';
 import UserMenu from './components/UserMenu';
 import DailySeeds from './components/DailySeeds';
 import { saveUserFavorite, getUserFavorites, removeUserFavorite, saveSearchHistory } from './lib/firebase';
+import { POPULAR_TAGS } from './lib/tags';
 
 type Feature = {
   name?: string;
@@ -712,6 +713,16 @@ function HomeContent() {
                     <button className="copy-btn" type="button" onClick={() => copySeed(seed.seed)}>
                       {copiedSeed === seed.seed ? '✓' : '📋'}
                     </button>
+                    {seed.seed && (
+                      <a
+                        href={`/feed?shareSeed=${encodeURIComponent(seed.seed)}&title=${encodeURIComponent(seed.title || 'Minecraft Favorite Seed')}&desc=${encodeURIComponent(seed.whyMatches || '')}`}
+                        className="copy-btn"
+                        style={{ textDecoration: 'none', background: '#1c2833', color: '#4dedf4', border: '1px solid var(--mc-text-blue)' }}
+                        title="Share seed to Minecraft Hub Feed"
+                      >
+                        📤 Share
+                      </a>
+                    )}
                   </div>
                   {seed.whyMatches && <p className="fav-description">{seed.whyMatches}</p>}
                 </article>
@@ -742,6 +753,51 @@ function HomeContent() {
             onChange={(e) => setQuery(e.target.value)}
             placeholder="Example: Java 1.21 village near spawn with trial chamber, cherry grove, and coordinates..."
           />
+
+          {/* Quick 100+ Minecraft Tags */}
+          <div style={{ margin: '8px 0 16px 0' }}>
+            <div style={{ display: 'flex', alignItems: 'center', gap: '8px', marginBottom: '6px' }}>
+              <span style={{ fontSize: '0.95rem', color: 'var(--mc-text-yellow)', fontWeight: 'bold' }}>🔥 100+ Tags:</span>
+              <span style={{ fontSize: '0.85rem', color: '#888' }}>Click any tag to auto-add to your seed search:</span>
+            </div>
+            <div style={{ 
+              display: 'flex', 
+              gap: '6px', 
+              overflowX: 'auto', 
+              paddingBottom: '8px', 
+              scrollbarWidth: 'thin' 
+            }}>
+              {POPULAR_TAGS.map((tag) => (
+                <button
+                  key={tag}
+                  type="button"
+                  onClick={() => {
+                    const tagDesc = tag.replace(/([A-Z])/g, ' $1').trim();
+                    setQuery((prev) => {
+                      if (!prev.trim()) return `Minecraft seed with ${tagDesc}`;
+                      if (prev.toLowerCase().includes(tagDesc.toLowerCase())) return prev;
+                      return `${prev.trim()}, ${tagDesc}`;
+                    });
+                    showToast(`Added #${tag} to search!`);
+                  }}
+                  style={{
+                    background: '#202020',
+                    color: '#4dedf4',
+                    border: '1px solid #3d3d3d',
+                    padding: '4px 10px',
+                    fontSize: '0.9rem',
+                    fontFamily: 'var(--font-pixel-read)',
+                    borderRadius: '2px',
+                    cursor: 'pointer',
+                    whiteSpace: 'nowrap',
+                    transition: 'all 0.15s'
+                  }}
+                >
+                  #{tag}
+                </button>
+              ))}
+            </div>
+          </div>
 
           <div className="controls">
             <div className="field">
@@ -877,6 +933,16 @@ function HomeContent() {
                     <button className="copy-btn" type="button" onClick={() => copySeed(seed.seed)}>
                       {copiedSeed === seed.seed ? '✓ Copied' : '📋 Copy'}
                     </button>
+                    {seed.seed && (
+                      <a
+                        href={`/feed?shareSeed=${encodeURIComponent(seed.seed)}&title=${encodeURIComponent(seed.title || 'Discovered Minecraft Seed')}&desc=${encodeURIComponent(seed.whyMatches || seed.spawn || '')}`}
+                        className="copy-btn"
+                        style={{ textDecoration: 'none', background: '#1c2833', color: '#4dedf4', border: '1px solid var(--mc-text-blue)' }}
+                        title="Share this seed to Minecraft Hub Social Feed"
+                      >
+                        📤 Share to Feed
+                      </a>
+                    )}
                   </div>
 
                   {seed.whyMatches && (
@@ -1064,9 +1130,21 @@ function HomeContent() {
                     </div>
                   )}
 
-                  <button className="secondary-btn library-copy" type="button" onClick={() => copySeed(seed.seed)}>
-                    {copiedSeed === seed.seed ? '✓ Copied' : '📋 Copy seed'}
-                  </button>
+                  <div style={{ display: 'flex', gap: '8px', marginTop: '12px' }}>
+                    <button className="secondary-btn library-copy" style={{ flex: 1, margin: 0 }} type="button" onClick={() => copySeed(seed.seed)}>
+                      {copiedSeed === seed.seed ? '✓ Copied' : '📋 Copy seed'}
+                    </button>
+                    {seed.seed && (
+                      <a
+                        href={`/feed?shareSeed=${encodeURIComponent(seed.seed)}&title=${encodeURIComponent(seed.title || 'Minecraft Library Seed')}&desc=${encodeURIComponent(seed.whyMatches || seed.spawn || '')}`}
+                        className="secondary-btn"
+                        style={{ textDecoration: 'none', padding: '6px 12px', fontSize: '0.95rem', display: 'flex', alignItems: 'center', background: '#1c2833', color: '#4dedf4', border: '1px solid var(--mc-text-blue)' }}
+                        title="Share this seed to Feed"
+                      >
+                        📤 Share
+                      </a>
+                    )}
+                  </div>
                 </article>
 
                 {activeSeedTab === 'saved' && (index + 1) % 3 === 0 && (

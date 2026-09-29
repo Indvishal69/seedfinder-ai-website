@@ -195,6 +195,7 @@ export type Post = {
   content: string;
   images: string[];
   seedData?: string; // Optional seed associated
+  tags?: string[]; // Optional tags
   likeCount: number;
   commentCount: number;
   createdAt: string;
@@ -207,7 +208,14 @@ export type Post = {
   };
 };
 
-export async function createPost(authorId: string, title: string, content: string, images: string[] = [], seedData: string = ''): Promise<Post> {
+export async function createPost(
+  authorId: string, 
+  title: string, 
+  content: string, 
+  images: string[] = [], 
+  seedData: string = '',
+  tags: string[] = []
+): Promise<Post> {
   const postRef = push(ref(db, 'posts'));
   const newPost: Post = {
     id: postRef.key as string,
@@ -216,6 +224,7 @@ export async function createPost(authorId: string, title: string, content: strin
     content,
     images,
     seedData,
+    tags,
     likeCount: 0,
     commentCount: 0,
     createdAt: new Date().toISOString()
