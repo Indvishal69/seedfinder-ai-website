@@ -12,7 +12,9 @@ import {
   getPostComments, 
   Comment,
   togglePinPost,
-  getPinnedPostId
+  getPinnedPostId,
+  toggleFollowUser,
+  getUserFollowingMap
 } from '../lib/firebase';
 import { uploadImageToImgBB } from '../lib/imgbb';
 import { POPULAR_TAGS, ALL_MINECRAFT_TAGS, searchTags } from '../lib/tags';
@@ -24,6 +26,8 @@ export default function FeedPage() {
   const [posts, setPosts] = useState<Post[]>([]);
   const [loading, setLoading] = useState(true);
   const [pinnedPostId, setPinnedPostId] = useState<string | null>(null);
+  const [followingMap, setFollowingMap] = useState<Record<string, boolean>>({});
+  const [expandedReplies, setExpandedReplies] = useState<Record<string, boolean>>({});
   
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [postTitle, setPostTitle] = useState('');
@@ -72,10 +76,28 @@ export default function FeedPage() {
   useEffect(() => {
     if (user) {
       getPinnedPostId(user.uid).then(id => setPinnedPostId(id)).catch(() => {});
+      getUserFollowingMap(user.uid).then(map => setFollowingMap(map)).catch(() => {});
     } else {
       setPinnedPostId(null);
+      setFollowingMap({});
     }
   }, [user]);
+
+  const handleToggleFollow = async (targetUserId: string) => {
+    if (!user) {
+      alert("Please sign in to follow creators!");
+      return;
+    }
+    const isCurrentlyFollowing = !!followingMap[targetUserId];
+    setFollowingMap(prev => ({ ...prev, [targetUserId]: !isCurrentlyFollowing }));
+    try {
+      const nowFollowing = await toggleFollowUser(user.uid, targetUserId);
+      setFollowingMap(prev => ({ ...prev, [targetUserId]: nowFollowing }));
+    } catch (err) {
+      console.error('Follow error:', err);
+      setFollowingMap(prev => ({ ...prev, [targetUserId]: isCurrentlyFollowing }));
+    }
+  };
 
   useEffect(() => {
     loadFeed();
@@ -391,32 +413,62 @@ export default function FeedPage() {
                 )}
 
                 {/* Author Header */}
-                <div style={{ display: 'flex', gap: '12px', alignItems: 'center', marginBottom: '16px' }}>
-                  <Link href={`/u/${post.author?.username}`}>
-                    <div className="user-avatar-btn" style={{ width: 48, height: 48 }}>
-                      {post.author?.photoURL ? (
-                        <img src={post.author.photoURL} className="user-avatar-img" />
-                      ) : (
-                        <span className="user-avatar-initial">{post.author?.displayName.charAt(0)}</span>
-                      )}
-                    </div>
-                  </Link>
-                  <div>
-                    <Link href={`/u/${post.author?.username}`} style={{ textDecoration: 'none' }}>
-                      <strong style={{ color: '#3f3f3f', fontSize: '1.1rem', display: 'flex', gap: '4px', alignItems: 'center' }}>
-                        {post.author?.displayName}
-                        {post.author?.verified && <span style={{ color: 'var(--mc-text-blue)' }}>✓</span>}
-                      </strong>
+                <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '16px', flexWrap: 'wrap', gap: '8px' }}>
+                  <div style={{ display: 'flex', gap: '12px', alignItems: 'center' }}>
+                    <Link href={`/u/${post.author?.username}`}>
+                      <div className="user-avatar-btn" style={{ width: 44, height: 44 }}>
+                        {post.author?.photoURL ? (
+                          <img src={post.author.photoURL} className="user-avatar-img" />
+                        ) : (
+                          <span className="user-avatar-initial">{post.author?.displayName.charAt(0)}</span>
+                        )}
+                      </div>
                     </Link>
-                    <div style={{ color: '#555555', fontFamily: 'var(--font-pixel-read)', fontSize: '1rem' }}>
-                      @{post.author?.username} • {timeAgo(post.createdAt)}
+                    <div>
+                      <Link href={`/u/${post.author?.username}`} style={{ textDecoration: 'none' }}>
+                        <strong style={{ color: '#1e293b', fontSize: '1.05rem', fontFamily: 'var(--font-sans)', display: 'flex', gap: '4px', alignItems: 'center' }}>
+                          {post.author?.displayName}
+                          {post.author?.verified && <span style={{ color: '#0284c7' }}>✓</span>}
+                        </strong>
+                      </Link>
+                      <div style={{ color: '#64748b', fontFamily: 'var(--font-sans)', fontSize: '0.85rem' }}>
+                        @{post.author?.username} • {timeAgo(post.createdAt)}
+                      </div>
                     </div>
                   </div>
+
+                  {/* YouTube-style Follow Button right next to username */}
+                  {user?.uid !== post.authorId && (
+                    <button
+                      type="button"
+                      onClick={() => handleToggleFollow(post.authorId)}
+                      style={{
+                        background: followingMap[post.authorId] ? '#334155' : '#cc0000',
+                        color: '#ffffff',
+                        border: followingMap[post.authorId] ? '1px solid #475569' : '1px solid #990000',
+                        boxShadow: followingMap[post.authorId] ? 'none' : '0 2px 6px rgba(204, 0, 0, 0.35)',
+                        padding: '6px 14px',
+                        borderRadius: '18px',
+                        fontSize: '0.85rem',
+                        fontWeight: 'bold',
+                        fontFamily: 'var(--font-sans)',
+                        cursor: 'pointer',
+                        display: 'inline-flex',
+                        alignItems: 'center',
+                        gap: '4px',
+                        transition: 'all 0.15s'
+                      }}
+                    >
+                      {followingMap[post.authorId] ? '✓ Following' : '+ Follow'}
+                    </button>
+                  )}
                 </div>
 
                 {/* Post Content */}
-                <h3 style={{ margin: '0 0 8px', color: '#3f3f3f' }}>{post.title}</h3>
-                <p style={{ margin: '0 0 16px', fontFamily: 'var(--font-pixel-read)', fontSize: '1.2rem', color: '#555555', whiteSpace: 'pre-wrap' }}>
+                <h3 style={{ margin: '0 0 8px', color: '#0f172a', fontSize: '1.25rem', fontFamily: 'var(--font-sans)', fontWeight: 700 }}>
+                  {post.title}
+                </h3>
+                <p style={{ margin: '0 0 16px', fontFamily: 'var(--font-sans)', fontSize: '0.95rem', lineHeight: 1.55, color: '#334155', whiteSpace: 'pre-wrap' }}>
                   {post.content}
                 </p>
 
@@ -474,10 +526,10 @@ export default function FeedPage() {
                           background: selectedTag === tag ? 'var(--mc-text-yellow)' : '#262626', 
                           color: selectedTag === tag ? '#111' : '#4dedf4', 
                           padding: '3px 8px', 
-                          fontSize: '0.9rem', 
+                          fontSize: '0.85rem', 
                           borderRadius: '2px', 
-                          fontFamily: 'var(--font-pixel-read)',
-                          fontWeight: 'bold',
+                          fontFamily: 'var(--font-sans)',
+                          fontWeight: 600,
                           border: '1px solid #444'
                         }}
                         title={`Filter by #${tag}`}
@@ -488,10 +540,34 @@ export default function FeedPage() {
                   </div>
                 )}
 
-                {/* Images */}
+                {/* Images with Fast Loading & Containment */}
                 {post.images && post.images.length > 0 && (
-                  <div style={{ marginBottom: '16px', border: '4px solid #373737', borderRightColor: '#ffffff', borderBottomColor: '#ffffff' }}>
-                    <img src={post.images[0]} style={{ width: '100%', display: 'block', imageRendering: 'pixelated' }} />
+                  <div style={{ 
+                    marginBottom: '16px', 
+                    border: '4px solid #373737', 
+                    borderRightColor: '#ffffff', 
+                    borderBottomColor: '#ffffff', 
+                    background: '#111827',
+                    display: 'flex',
+                    justifyContent: 'center',
+                    alignItems: 'center',
+                    maxHeight: '520px',
+                    overflow: 'hidden',
+                    borderRadius: '2px'
+                  }}>
+                    <img 
+                      src={post.images[0]} 
+                      alt={post.title}
+                      loading="lazy"
+                      decoding="async"
+                      style={{ 
+                        maxWidth: '100%', 
+                        maxHeight: '520px', 
+                        height: 'auto', 
+                        display: 'block', 
+                        objectFit: 'contain' 
+                      }} 
+                    />
                   </div>
                 )}
 
@@ -531,57 +607,125 @@ export default function FeedPage() {
                   <div style={{ marginTop: '16px', borderTop: '2px dashed #555555', paddingTop: '16px' }}>
                     <div style={{ display: 'flex', flexDirection: 'column', gap: '12px', marginBottom: '16px' }}>
                       {commentsMap[post.id]?.length > 0 ? (
-                        commentsMap[post.id].map(comment => (
-                          <div 
-                            key={comment.id} 
-                            style={{ 
-                              background: comment.replyToId ? '#242424' : '#2c2c2c', 
-                              padding: '12px', 
-                              border: '2px solid',
-                              borderColor: comment.replyToId ? '#3a3a3a' : '#444',
-                              marginLeft: comment.replyToId ? '24px' : '0',
-                              borderLeft: comment.replyToId ? '4px solid var(--mc-text-blue)' : '2px solid #444'
-                            }}
-                          >
-                            {comment.replyToUsername && (
-                              <div style={{ color: 'var(--mc-text-blue)', fontSize: '0.95rem', marginBottom: '6px', display: 'flex', alignItems: 'center', gap: '4px' }}>
-                                <span>↳ Replying to</span>
-                                <strong>@{comment.replyToUsername}</strong>
-                                {comment.replyToName && <span style={{ color: '#888' }}>({comment.replyToName})</span>}
+                        (() => {
+                          const allComments = commentsMap[post.id];
+                          const rootComments = allComments.filter(c => !c.replyToId);
+                          const repliesMap: Record<string, Comment[]> = {};
+                          allComments.forEach(c => {
+                            if (c.replyToId) {
+                              if (!repliesMap[c.replyToId]) repliesMap[c.replyToId] = [];
+                              repliesMap[c.replyToId].push(c);
+                            }
+                          });
+
+                          return rootComments.map(comment => {
+                            const replies = repliesMap[comment.id] || [];
+                            const isRepliesOpen = !!expandedReplies[comment.id];
+
+                            return (
+                              <div key={comment.id} style={{ display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                {/* Top-Level Comment */}
+                                <div style={{ background: '#2c2c2c', padding: '12px', border: '2px solid #444', borderRadius: '3px' }}>
+                                  <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                    <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
+                                      <Link href={`/u/${comment.author?.username}`}>
+                                        <strong style={{ color: 'var(--mc-text-yellow)', fontFamily: 'var(--font-sans)', fontSize: '0.95rem' }}>
+                                          {comment.author?.displayName}
+                                        </strong>
+                                      </Link>
+                                      <span style={{ color: '#888', fontSize: '0.8rem', fontFamily: 'var(--font-sans)' }}>{timeAgo(comment.createdAt)}</span>
+                                    </div>
+                                    {user && (
+                                      <button 
+                                        type="button"
+                                        className="secondary-btn"
+                                        style={{ padding: '2px 8px', fontSize: '0.8rem', fontFamily: 'var(--font-sans)' }}
+                                        onClick={() => {
+                                          setReplyingTo({
+                                            postId: post.id,
+                                            commentId: comment.id,
+                                            username: comment.author?.username || 'miner',
+                                            displayName: comment.author?.displayName || 'Miner'
+                                          });
+                                        }}
+                                      >
+                                        ↩ Reply
+                                      </button>
+                                    )}
+                                  </div>
+                                  <p style={{ margin: 0, color: '#f1f5f9', fontSize: '0.95rem', fontFamily: 'var(--font-sans)', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                                    {comment.content}
+                                  </p>
+
+                                  {/* Show / Hide Replies Toggle Button */}
+                                  {replies.length > 0 && (
+                                    <button
+                                      type="button"
+                                      onClick={() => setExpandedReplies(prev => ({ ...prev, [comment.id]: !prev[comment.id] }))}
+                                      style={{
+                                        background: 'none',
+                                        border: 'none',
+                                        color: '#38bdf8',
+                                        fontSize: '0.85rem',
+                                        cursor: 'pointer',
+                                        fontFamily: 'var(--font-sans)',
+                                        fontWeight: 600,
+                                        padding: '8px 0 0',
+                                        display: 'inline-flex',
+                                        alignItems: 'center',
+                                        gap: '6px'
+                                      }}
+                                    >
+                                      {isRepliesOpen ? `▲ Hide replies (${replies.length})` : `▼ Show replies (${replies.length})`}
+                                    </button>
+                                  )}
+                                </div>
+
+                                {/* Nested Replies Container */}
+                                {isRepliesOpen && replies.length > 0 && (
+                                  <div style={{ marginLeft: '16px', paddingLeft: '10px', borderLeft: '3px solid #38bdf8', display: 'flex', flexDirection: 'column', gap: '8px' }}>
+                                    {replies.map(reply => (
+                                      <div key={reply.id} style={{ background: '#222222', padding: '10px', border: '1px solid #3d3d3d', borderRadius: '3px' }}>
+                                        <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
+                                          <div style={{ display: 'flex', alignItems: 'center', gap: '6px' }}>
+                                            <Link href={`/u/${reply.author?.username}`}>
+                                              <strong style={{ color: '#93c5fd', fontFamily: 'var(--font-sans)', fontSize: '0.9rem' }}>
+                                                {reply.author?.displayName}
+                                              </strong>
+                                            </Link>
+                                            <span style={{ color: '#888', fontSize: '0.75rem', fontFamily: 'var(--font-sans)' }}>{timeAgo(reply.createdAt)}</span>
+                                          </div>
+                                          {user && (
+                                            <button 
+                                              type="button"
+                                              className="secondary-btn"
+                                              style={{ padding: '2px 6px', fontSize: '0.75rem', fontFamily: 'var(--font-sans)' }}
+                                              onClick={() => {
+                                                setReplyingTo({
+                                                  postId: post.id,
+                                                  commentId: comment.id,
+                                                  username: reply.author?.username || 'miner',
+                                                  displayName: reply.author?.displayName || 'Miner'
+                                                });
+                                              }}
+                                            >
+                                              ↩ Reply
+                                            </button>
+                                          )}
+                                        </div>
+                                        <p style={{ margin: 0, color: '#e2e8f0', fontSize: '0.9rem', fontFamily: 'var(--font-sans)', whiteSpace: 'pre-wrap', lineHeight: 1.4 }}>
+                                          {reply.content}
+                                        </p>
+                                      </div>
+                                    ))}
+                                  </div>
+                                )}
                               </div>
-                            )}
-                            <div style={{ display: 'flex', alignItems: 'center', justifyContent: 'space-between', marginBottom: '4px' }}>
-                              <div style={{ display: 'flex', alignItems: 'center', gap: '8px' }}>
-                                <Link href={`/u/${comment.author?.username}`}>
-                                  <strong style={{ color: 'var(--mc-text-yellow)' }}>
-                                    {comment.author?.displayName}
-                                  </strong>
-                                </Link>
-                                <span style={{ color: '#888', fontSize: '0.9rem' }}>{timeAgo(comment.createdAt)}</span>
-                              </div>
-                              {user && (
-                                <button 
-                                  type="button"
-                                  className="secondary-btn"
-                                  style={{ padding: '2px 8px', fontSize: '0.85rem' }}
-                                  onClick={() => {
-                                    setReplyingTo({
-                                      postId: post.id,
-                                      commentId: comment.id,
-                                      username: comment.author?.username || 'miner',
-                                      displayName: comment.author?.displayName || 'Miner'
-                                    });
-                                  }}
-                                >
-                                  ↩ Reply
-                                </button>
-                              )}
-                            </div>
-                            <p style={{ margin: 0, color: '#e0e0e0', fontSize: '1.2rem', whiteSpace: 'pre-wrap' }}>{comment.content}</p>
-                          </div>
-                        ))
+                            );
+                          });
+                        })()
                       ) : (
-                        <p style={{ color: '#888', fontStyle: 'italic', margin: 0 }}>No comments yet.</p>
+                        <p style={{ color: '#888', fontStyle: 'italic', margin: 0, fontFamily: 'var(--font-sans)', fontSize: '0.9rem' }}>No comments yet.</p>
                       )}
                     </div>
                     

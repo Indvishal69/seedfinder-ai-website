@@ -603,11 +603,11 @@ function HomeContent() {
             <span className="nav-icon">📖</span> Guides
           </a>
           
-          <div style={{ position: 'relative', marginLeft: '12px' }}>
+          <div style={{ position: 'relative', margin: '4px 0', width: '100%', maxWidth: '220px' }}>
             <input 
               type="text" 
               placeholder="🔍 Search Users..." 
-              style={{ background: '#1e1e1e', color: '#fff', border: '2px solid #555', padding: '6px 12px', fontSize: '1.2rem', fontFamily: 'var(--font-pixel-read)' }}
+              style={{ background: '#1e1e1e', color: '#fff', border: '2px solid #555', padding: '6px 12px', fontSize: '0.9rem', fontFamily: 'var(--font-sans)', width: '100%', borderRadius: '4px' }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && (e.target as HTMLInputElement).value.trim() !== '') {
                   window.location.href = `/u/${(e.target as HTMLInputElement).value.trim()}`;

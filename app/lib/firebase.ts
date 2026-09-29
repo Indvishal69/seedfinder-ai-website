@@ -344,6 +344,16 @@ export async function checkIsFollowing(currentUserId: string, targetUserId: stri
   return snapshot.exists();
 }
 
+export async function getUserFollowingMap(currentUserId: string): Promise<Record<string, boolean>> {
+  try {
+    const snapshot = await get(ref(db, `following/${currentUserId}`));
+    return snapshot.exists() ? (snapshot.val() || {}) : {};
+  } catch (err) {
+    console.error('Error fetching following map:', err);
+    return {};
+  }
+}
+
 export async function toggleLikePost(userId: string, postId: string) {
   const likeRef = ref(db, `postLikes/${postId}/${userId}`);
   const postRef = ref(db, `posts/${postId}/likeCount`);

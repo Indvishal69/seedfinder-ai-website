@@ -47,13 +47,13 @@ export default function Navbar() {
             <span className="nav-icon">🔔</span> Alerts
           </Link>
           
-          <div style={{ position: 'relative', marginLeft: '12px' }}>
+          <div style={{ position: 'relative', margin: '4px 0', width: '100%', maxWidth: '220px' }}>
             <input 
               type="text" 
               placeholder="🔍 Search Users..." 
               value={searchUser}
               onChange={e => setSearchUser(e.target.value)}
-              style={{ background: '#1e1e1e', color: '#fff', border: '2px solid #555', padding: '6px 12px', fontSize: '1.2rem', fontFamily: 'var(--font-pixel-read)', width: '160px' }}
+              style={{ background: '#1e1e1e', color: '#fff', border: '2px solid #555', padding: '6px 12px', fontSize: '0.9rem', fontFamily: 'var(--font-sans)', width: '100%', borderRadius: '4px' }}
               onKeyDown={(e) => {
                 if (e.key === 'Enter' && searchUser.trim()) {
                   window.location.href = `/u/${searchUser.trim()}`;
