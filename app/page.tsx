@@ -566,7 +566,7 @@ function HomeContent() {
       {/* Modern Nav */}
       <nav className="top-nav" aria-label="Main navigation">
         <a className="brand-lockup" href="#finder">
-          <span className="brand-icon">⛏️</span>
+          <img src="/favicon.png" alt="SeedFinder AI Logo" style={{ width: 34, height: 34, borderRadius: 6, imageRendering: 'pixelated', border: '1px solid var(--mc-text-blue)' }} />
           <span>SeedFinder<span className="brand-ai">AI</span></span>
         </a>
 

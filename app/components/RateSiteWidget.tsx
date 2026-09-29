@@ -163,7 +163,9 @@ export default function RateSiteWidget() {
             </button>
 
             <div className="auth-header">
-              <div className="auth-icon" style={{ fontSize: '2.5rem' }}>⭐</div>
+              <div style={{ textAlign: 'center', marginBottom: '14px' }}>
+                <img src="/logo.jpg" alt="SeedFinder AI" style={{ width: 72, height: 72, borderRadius: 12, margin: '0 auto', display: 'block', border: '2px solid #555', boxShadow: '0 4px 14px rgba(0,0,0,0.5)' }} />
+              </div>
               <h2>Rate SeedFinder AI</h2>
               <p>Your review helps us make the best Minecraft seed finder in the world!</p>
             </div>

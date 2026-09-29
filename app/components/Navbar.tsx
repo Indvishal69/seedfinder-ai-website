@@ -23,7 +23,7 @@ export default function Navbar() {
       
       <nav className="top-nav" aria-label="Main navigation">
         <Link className="brand-lockup" href="/">
-          <span className="brand-icon">⛏️</span>
+          <img src="/favicon.png" alt="SeedFinder AI Logo" style={{ width: 32, height: 32, borderRadius: 6, imageRendering: 'pixelated', border: '1px solid var(--mc-text-blue)' }} />
           <span>SeedFinder<span className="brand-ai">AI</span></span>
         </Link>
 
